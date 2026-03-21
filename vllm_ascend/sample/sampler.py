@@ -1,4 +1,5 @@
 import torch
+from vllm.logger import init_logger
 from vllm.model_executor.layers.batch_invariant import vllm_is_batch_invariant
 from vllm.v1.sample.ops.topk_topp_sampler import TopKTopPSampler
 from vllm.v1.sample.sampler import Sampler
@@ -7,6 +8,16 @@ from vllm_ascend.ascend_config import get_ascend_config
 from vllm_ascend.utils import AscendDeviceType, get_ascend_device_type, global_stream, npu_stream_switch
 
 DEFAULT_LOGPROBS_MODE = "raw_logprobs"
+logger = init_logger(__name__)
+_warned_topk_topp_fallback = False
+
+
+def _has_ascendc_topk_topp() -> bool:
+    try:
+        getattr(torch.ops._C_ascend, "npu_apply_top_k_top_p")
+        return True
+    except AttributeError:
+        return False
 
 
 def random_sample(
@@ -134,13 +145,22 @@ def _apply_top_k_top_p_ascendc(
     k: torch.Tensor,
     p: torch.Tensor,
 ) -> torch.Tensor:
+    global _warned_topk_topp_fallback
     if p is None and k is None:
         return logits
-    return torch.ops._C_ascend.npu_apply_top_k_top_p(logits, k=k, p=p)
+    try:
+        return torch.ops._C_ascend.npu_apply_top_k_top_p(logits, k=k, p=p)
+    except AttributeError:
+        if not _warned_topk_topp_fallback:
+            logger.warning(
+                "Custom op npu_apply_top_k_top_p is unavailable; falling back to the PyTorch implementation."
+            )
+            _warned_topk_topp_fallback = True
+        return _apply_top_k_top_p_pytorch(logits, k, p)
 
 
 apply_top_k_top_p = (
     _apply_top_k_top_p_ascendc
-    if get_ascend_device_type() in [AscendDeviceType.A2, AscendDeviceType.A3]
+    if get_ascend_device_type() in [AscendDeviceType.A2, AscendDeviceType.A3] and _has_ascendc_topk_topp()
     else _apply_top_k_top_p_pytorch
 )

@@ -23,6 +23,7 @@ import torch
 import torch_npu
 import vllm.envs as envs_vllm
 from vllm.config import VllmConfig, get_current_vllm_config
+from vllm.logger import init_logger
 from vllm.utils.math_utils import cdiv
 from vllm.v1.attention.backend import (  # type: ignore
     AttentionBackend,
@@ -60,6 +61,9 @@ from vllm_ascend.utils import weak_ref_tensors
 
 # default max value of sliding window size
 SWA_INT_MAX = 2147483647
+SUPPORTED_TND_FIA_HEAD_SIZES = {192}
+
+logger = init_logger(__name__)
 
 
 @register_backend(AttentionBackendEnum.CUSTOM, "ASCEND")
@@ -346,6 +350,8 @@ class AscendAttentionMetadataBuilder(AttentionMetadataBuilder[AscendMetadata]):
 
 
 class AscendAttentionBackendImpl(AttentionImpl):
+    _warned_fallback_head_sizes: ClassVar[set[int]] = set()
+
     def __init__(
         self,
         num_heads: int,
@@ -382,6 +388,20 @@ class AscendAttentionBackendImpl(AttentionImpl):
             self.vllm_config.kv_transfer_config is not None and self.vllm_config.kv_transfer_config.is_kv_producer
         )
         self.sinks = sinks
+
+    def _supports_tnd_fused_infer_attention(self) -> bool:
+        return self.head_size in SUPPORTED_TND_FIA_HEAD_SIZES
+
+    def _log_fused_attention_fallback(self, attn_state: AscendAttentionState) -> None:
+        if self.head_size in self._warned_fallback_head_sizes:
+            return
+        self._warned_fallback_head_sizes.add(self.head_size)
+        logger.warning(
+            "Falling back from npu_fused_infer_attention_score for head_size=%s state=%s. "
+            "The current CANN runtime does not support this TND layout shape.",
+            self.head_size,
+            attn_state.name,
+        )
 
     @staticmethod
     def update_graph_params(
@@ -865,6 +885,9 @@ class AscendAttentionBackendImpl(AttentionImpl):
         _: torch.Tensor,
     ) -> torch.Tensor:
         assert attn_metadata is not None
+        atten_mask = attn_metadata.attn_mask
+        if atten_mask is not None and atten_mask.dtype not in (torch.bool, torch.uint8):
+            atten_mask = atten_mask.to(torch.bool)
 
         if attn_metadata.causal:
             # use sparse_mode 3 in causal scenario
@@ -876,7 +899,7 @@ class AscendAttentionBackendImpl(AttentionImpl):
                 input_layout="TND",
                 scale=self.scale,
                 sparse_mode=3,
-                atten_mask=attn_metadata.attn_mask,
+                atten_mask=atten_mask,
                 actual_seq_qlen=attn_metadata.actual_seq_lengths_q,
                 actual_seq_kvlen=attn_metadata.actual_seq_lengths_q,
             )[0]
@@ -933,10 +956,23 @@ class AscendAttentionBackendImpl(AttentionImpl):
     ):
         num_tokens = query.shape[0]
         if (
-            attn_metadata.attn_state == AscendAttentionState.DecodeOnly
-            and using_paged_attention(num_tokens, self.vllm_config)
-            and self.sliding_window is None
+            attn_metadata.attn_state == AscendAttentionState.PrefillNoCache
+            and self.attn_type != AttentionType.ENCODER_DECODER
+            and not self._supports_tnd_fused_infer_attention()
         ):
+            self._log_fused_attention_fallback(attn_metadata.attn_state)
+            return self._forward_encoder_attention(query, key, value, attn_metadata, output)
+
+        if (
+            attn_metadata.attn_state == AscendAttentionState.DecodeOnly
+            and self.sliding_window is None
+            and (
+                using_paged_attention(num_tokens, self.vllm_config)
+                or not self._supports_tnd_fused_infer_attention()
+            )
+        ):
+            if not self._supports_tnd_fused_infer_attention():
+                self._log_fused_attention_fallback(attn_metadata.attn_state)
             output = self.forward_paged_attention(query, attn_metadata, output)
         else:
             output = self.forward_fused_infer_attention(query, key, value, attn_metadata, output)

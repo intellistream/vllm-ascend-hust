@@ -1,4 +1,5 @@
 import math
+import inspect
 from contextlib import contextmanager
 from enum import Enum
 from typing import Any
@@ -53,13 +54,16 @@ def set_ascend_forward_context(
     forward_context_kwargs = {
         "attn_metadata": attn_metadata,
         "vllm_config": vllm_config,
-        "virtual_engine": virtual_engine,
         "num_tokens": num_tokens,
         "num_tokens_across_dp": num_tokens_across_dp,
         "cudagraph_runtime_mode": aclgraph_runtime_mode,
         "batch_descriptor": batch_descriptor,
         "skip_compiled": skip_compiled,
     }
+
+    # Compat: vllm-hust's set_forward_context may not accept virtual_engine.
+    if "virtual_engine" in inspect.signature(set_forward_context).parameters:
+        forward_context_kwargs["virtual_engine"] = virtual_engine
 
     with set_forward_context(**forward_context_kwargs):
         forward_context = get_forward_context()
