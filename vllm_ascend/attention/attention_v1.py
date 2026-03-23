@@ -61,7 +61,6 @@ from vllm_ascend.utils import weak_ref_tensors
 
 # default max value of sliding window size
 SWA_INT_MAX = 2147483647
-SUPPORTED_TND_FIA_HEAD_SIZES = {192}
 
 logger = init_logger(__name__)
 
@@ -350,7 +349,8 @@ class AscendAttentionMetadataBuilder(AttentionMetadataBuilder[AscendMetadata]):
 
 
 class AscendAttentionBackendImpl(AttentionImpl):
-    _warned_fallback_head_sizes: ClassVar[set[int]] = set()
+    _warned_fallback_profiles: ClassVar[set[tuple[int, AscendAttentionState]]] = set()
+    _fia_unsupported_profiles: ClassVar[set[tuple[int, AscendAttentionState]]] = set()
 
     def __init__(
         self,
@@ -389,19 +389,57 @@ class AscendAttentionBackendImpl(AttentionImpl):
         )
         self.sinks = sinks
 
-    def _supports_tnd_fused_infer_attention(self) -> bool:
-        return self.head_size in SUPPORTED_TND_FIA_HEAD_SIZES
+    def _supports_tnd_fused_infer_attention(self, attn_state: AscendAttentionState) -> bool:
+        return (self.head_size, attn_state) not in self._fia_unsupported_profiles
 
-    def _log_fused_attention_fallback(self, attn_state: AscendAttentionState) -> None:
-        if self.head_size in self._warned_fallback_head_sizes:
+    def _log_fused_attention_fallback(self, attn_state: AscendAttentionState, reason: str) -> None:
+        profile = (self.head_size, attn_state)
+        if profile in self._warned_fallback_profiles:
             return
-        self._warned_fallback_head_sizes.add(self.head_size)
+        self._warned_fallback_profiles.add(profile)
         logger.warning(
             "Falling back from npu_fused_infer_attention_score for head_size=%s state=%s. "
-            "The current CANN runtime does not support this TND layout shape.",
+            "Reason: %s",
             self.head_size,
             attn_state.name,
+            reason,
         )
+
+    @staticmethod
+    def _is_fia_runtime_unsupported_error(error: RuntimeError) -> bool:
+        text = str(error).lower()
+        keywords = (
+            "not support",
+            "unsupported",
+            "shape",
+            "head",
+            "tnd",
+            "infer_attention",
+            "aicore",
+            "acl",
+            "cann",
+        )
+        return any(keyword in text for keyword in keywords)
+
+    def _mark_fia_unsupported(
+        self,
+        attn_state: AscendAttentionState,
+        error: RuntimeError,
+    ) -> None:
+        self._fia_unsupported_profiles.add((self.head_size, attn_state))
+        self._log_fused_attention_fallback(attn_state, str(error))
+
+    def _fallback_when_fia_unavailable(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        attn_metadata: AscendMetadata,
+        output: torch.Tensor,
+    ) -> torch.Tensor:
+        if attn_metadata.attn_state == AscendAttentionState.PrefillNoCache:
+            return self._forward_encoder_attention(query, key, value, attn_metadata, output)
+        return self.forward_paged_attention(query, attn_metadata, output)
 
     @staticmethod
     def update_graph_params(
@@ -958,24 +996,27 @@ class AscendAttentionBackendImpl(AttentionImpl):
         if (
             attn_metadata.attn_state == AscendAttentionState.PrefillNoCache
             and self.attn_type != AttentionType.ENCODER_DECODER
-            and not self._supports_tnd_fused_infer_attention()
+            and not self._supports_tnd_fused_infer_attention(attn_metadata.attn_state)
         ):
-            self._log_fused_attention_fallback(attn_metadata.attn_state)
-            return self._forward_encoder_attention(query, key, value, attn_metadata, output)
+            return self._fallback_when_fia_unavailable(query, key, value, attn_metadata, output)
 
         if (
             attn_metadata.attn_state == AscendAttentionState.DecodeOnly
             and self.sliding_window is None
             and (
                 using_paged_attention(num_tokens, self.vllm_config)
-                or not self._supports_tnd_fused_infer_attention()
+                or not self._supports_tnd_fused_infer_attention(attn_metadata.attn_state)
             )
         ):
-            if not self._supports_tnd_fused_infer_attention():
-                self._log_fused_attention_fallback(attn_metadata.attn_state)
             output = self.forward_paged_attention(query, attn_metadata, output)
         else:
-            output = self.forward_fused_infer_attention(query, key, value, attn_metadata, output)
+            try:
+                output = self.forward_fused_infer_attention(query, key, value, attn_metadata, output)
+            except RuntimeError as error:
+                if not self._is_fia_runtime_unsupported_error(error):
+                    raise
+                self._mark_fia_unsupported(attn_metadata.attn_state, error)
+                output = self._fallback_when_fia_unavailable(query, key, value, attn_metadata, output)
 
         return output
 

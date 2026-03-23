@@ -195,6 +195,8 @@ class TestAscendAttentionBackendImpl(TestBase):
             logits_soft_cap=None,
             attn_type=self.attention_type.DECODER,
             kv_sharing_target_layer_name=None)
+        AscendAttentionBackendImpl._warned_fallback_profiles.clear()
+        AscendAttentionBackendImpl._fia_unsupported_profiles.clear()
 
     def test_forward_no_attn_metadata(self):
         """Test forward pass when attn_metadata is None"""
@@ -348,3 +350,85 @@ class TestAscendAttentionBackendImpl(TestBase):
         mock_fused_infer_attention_score.assert_called_once()
 
         assert output.shape == (10, 8, 64)
+
+    @patch('vllm_ascend.ascend_forward_context.get_forward_context')
+    @patch('torch_npu._npu_paged_attention')
+    @patch('torch_npu.npu_fused_infer_attention_score')
+    @patch('torch_npu._npu_reshape_and_cache')
+    def test_prefill_cache_hit_fia_error_fallback_and_quarantine(
+            self,
+            mock_npu_reshape_and_cache,
+            mock_fused_infer_attention_score,
+            mock_paged_attention,
+            mock_get_forward_context):
+        query = torch.randn(10, 8, 64)
+        key = torch.randn(10, 8, 64)
+        value = torch.randn(10, 8, 64)
+        kv_cache = torch.empty(2, 5, 128, 8, 64)
+        output = torch.empty_like(query)
+
+        metadata = self.attn_metadata
+        metadata.attn_state = AscendAttentionState.PrefillCacheHit
+        metadata.attn_mask = torch.randn(1, 1, 10, 10)
+        metadata.query_lens = torch.tensor([10])
+        metadata.seq_lens = torch.tensor([10])
+        metadata.seq_lens_list = [10]
+        metadata.actual_seq_lengths_q = [10]
+        metadata.block_tables = torch.zeros(1, 5, dtype=torch.long)
+        metadata.num_actual_tokens = 10
+        metadata.num_decode_tokens = 0
+        metadata.num_decodes = 0
+        metadata.num_prefills = 10
+        metadata.slot_mapping = torch.zeros(10, dtype=torch.long)
+
+        mock_get_forward_context.return_value = MagicMock(capturing=False)
+        mock_fused_infer_attention_score.side_effect = RuntimeError(
+            "npu_fused_infer_attention_score not support current shape")
+
+        self.impl.forward(self.layer_no_quant, query, key, value, kv_cache,
+                          metadata, output)
+        self.impl.forward(self.layer_no_quant, query, key, value, kv_cache,
+                          metadata, output)
+
+        self.assertEqual(mock_fused_infer_attention_score.call_count, 1)
+        self.assertEqual(mock_paged_attention.call_count, 2)
+
+    @patch('vllm_ascend.ascend_forward_context.get_forward_context')
+    @patch('torch_npu.npu_fusion_attention')
+    @patch('torch_npu.npu_fused_infer_attention_score')
+    @patch('torch_npu._npu_reshape_and_cache')
+    def test_prefill_no_cache_fia_error_fallback_to_encoder_attention(
+            self,
+            mock_npu_reshape_and_cache,
+            mock_fused_infer_attention_score,
+            mock_npu_fusion_attention,
+            mock_get_forward_context):
+        query = torch.randn(10, 8, 64)
+        key = torch.randn(10, 8, 64)
+        value = torch.randn(10, 8, 64)
+        kv_cache = torch.empty(2, 5, 128, 8, 64)
+        output = torch.empty_like(query)
+
+        metadata = self.attn_metadata
+        metadata.attn_state = AscendAttentionState.PrefillNoCache
+        metadata.attn_mask = None
+        metadata.causal = True
+        metadata.actual_seq_lengths_q = [10]
+        metadata.seq_lens = torch.tensor([10])
+        metadata.seq_lens_list = [10]
+        metadata.block_tables = torch.zeros(1, 5, dtype=torch.long)
+        metadata.num_actual_tokens = 10
+        metadata.num_decode_tokens = 0
+        metadata.num_decodes = 0
+        metadata.num_prefills = 10
+        metadata.slot_mapping = torch.zeros(10, dtype=torch.long)
+
+        mock_get_forward_context.return_value = MagicMock(capturing=False)
+        mock_fused_infer_attention_score.side_effect = RuntimeError(
+            "TND shape unsupported")
+        mock_npu_fusion_attention.return_value = (torch.ones(10, 8, 64), )
+
+        self.impl.forward(self.layer_no_quant, query, key, value, kv_cache,
+                          metadata, output)
+
+        mock_npu_fusion_attention.assert_called_once()
