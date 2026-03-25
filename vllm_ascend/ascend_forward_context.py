@@ -20,6 +20,7 @@ from vllm_ascend.utils import (
     is_drafter_moe_model,
     is_moe_model,
     speculative_enable_dispatch_gmm_combine_decode,
+    vllm_version_is,
 )
 
 
@@ -60,6 +61,8 @@ def set_ascend_forward_context(
         "batch_descriptor": batch_descriptor,
         "skip_compiled": skip_compiled,
     }
+    if vllm_version_is("0.18.0"):
+        forward_context_kwargs["virtual_engine"] = virtual_engine
 
     # Compat: vllm-hust's set_forward_context may not accept virtual_engine.
     if "virtual_engine" in inspect.signature(set_forward_context).parameters:
@@ -71,7 +74,9 @@ def set_ascend_forward_context(
 
         from vllm_ascend.ops.fused_moe.moe_comm_method import get_moe_comm_method
 
-        moe_comm_type = select_moe_comm_method(num_tokens, vllm_config, is_draft_model)
+        max_num_tokens = int(num_tokens_across_dp.max().item()) if num_tokens_across_dp is not None else num_tokens
+        moe_comm_type = select_moe_comm_method(max_num_tokens, vllm_config, is_draft_model)
+
         forward_context.moe_comm_type = moe_comm_type
         forward_context.moe_comm_method = get_moe_comm_method(moe_comm_type)
 
