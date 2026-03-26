@@ -66,6 +66,30 @@ Please use the following recommended versions to get started quickly:
 | v0.17.0rc1 | Latest release candidate | See [QuickStart](https://docs.vllm.ai/projects/ascend/en/latest/quick_start.html) and [Installation](https://docs.vllm.ai/projects/ascend/en/latest/installation.html) for more details |
 | v0.13.0 | Latest stable version | See [QuickStart](https://docs.vllm.ai/projects/ascend/en/v0.13.0/quick_start.html) and [Installation](https://docs.vllm.ai/projects/ascend/en/v0.13.0/installation.html) for more details |
 
+## Local Workspace Helpers
+
+For the local `vllm-hust` multi-root workspace, Ascend-specific helper scripts
+are kept under `scripts/` in this repository rather than in `vllm-hust`.
+
+Common examples:
+
+```bash
+# install a local vllm-ascend plugin checkout into the current Python env
+bash scripts/install_local_ascend_plugin.sh
+
+# source a single Ascend runtime into the current shell
+source scripts/use_single_ascend_env.sh /usr/local/Ascend/ascend-toolkit/latest
+
+# run a small latency benchmark with the same runtime setup
+bash scripts/run_ascend_latency_bench.sh /usr/local/Ascend/ascend-toolkit/latest
+
+# bootstrap a local one-command launch flow through hust-ascend-manager
+bash scripts/bootstrap_ascend.sh Qwen/Qwen2.5-1.5B-Instruct
+
+# diagnose current Ascend runtime and Python setup
+bash scripts/doctor_ascend_env.sh
+```
+
 ## Contributing
 
 See [CONTRIBUTING](https://docs.vllm.ai/projects/ascend/en/latest/developer_guide/contribution/index.html) for more details, which is a step-by-step guide to help you set up the development environment, build and test.
