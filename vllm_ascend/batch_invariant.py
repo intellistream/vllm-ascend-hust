@@ -21,8 +21,9 @@ import os
 import torch
 import torch_npu
 from vllm.logger import logger
-from vllm.model_executor.layers.batch_invariant import vllm_is_batch_invariant
 from vllm.triton_utils import HAS_TRITON
+
+from vllm_ascend.compat import is_batch_invariant_enabled
 
 # in case recursive call in reduce_sum.
 torch_sum = torch.sum
@@ -136,7 +137,7 @@ def init_batch_invariance():
     Call this function early in your application, or set VLLM_BATCH_INVARIANT=1
     environment variable to enable automatically.
     """
-    if vllm_is_batch_invariant():
+    if is_batch_invariant_enabled():
         if HAS_TRITON or HAS_ASCENDC_BATCH_INVARIANT:
             logger.info(
                 "Enabling batch-invariant mode for vLLM on Ascend NPU.",

@@ -102,7 +102,13 @@ class NPUWorker(WorkerBase):
 
         ops.register_dummy_fusion_op()
         if get_ascend_device_type() != AscendDeviceType.A5:
-            _register_atb_extensions()
+            try:
+                _register_atb_extensions()
+            except Exception as exc:
+                logger.warning(
+                    "Failed to register ATB extensions (%s). Continuing without ATB extension ops.",
+                    exc,
+                )
         register_ascend_customop(vllm_config)
         # init ascend config and soc version
         init_ascend_config(vllm_config)
