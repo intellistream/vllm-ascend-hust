@@ -19,6 +19,10 @@
 
 import copy
 import gc
+import math
+import os
+import re
+import subprocess
 from types import NoneType
 
 import torch
@@ -72,6 +76,168 @@ torch_non_c_binding_in_graph_functions_npu = dict.fromkeys(
 )  # noqa: E402
 torch_non_c_binding_in_graph_functions_npu["torch.npu.stream"] = TorchInGraphFunctionVariable  # noqa: E402
 torch._dynamo.trace_rules.torch_name_rule_map.append(torch_non_c_binding_in_graph_functions_npu)  # noqa: E402
+
+
+def _format_startup_memory_error(
+    free_memory: int,
+    total_memory: int,
+    gpu_memory_utilization: float,
+    visible_device_count: int,
+) -> str:
+    gib = lambda value: round(value / GiB_bytes, 2)
+
+    requested_memory = total_memory * gpu_memory_utilization
+    max_usable_ratio = free_memory / total_memory if total_memory > 0 else 0.0
+    suggested_ratio = max(0.01, math.floor(max(max_usable_ratio - 0.01, 0.0) * 100) / 100)
+
+    message_lines = [
+        (
+            f"Free memory on device ({gib(free_memory)}/{gib(total_memory)} GiB) on startup "
+            f"is less than desired GPU memory utilization ({gpu_memory_utilization}, "
+            f"{gib(requested_memory)} GiB)."
+        ),
+        (
+            "Free memory on the selected Ascend device or lower "
+            f"`--gpu-memory-utilization` to at most about {suggested_ratio:.2f}."
+        ),
+    ]
+
+    if visible_device_count > 1 and not os.environ.get("ASCEND_RT_VISIBLE_DEVICES"):
+        message_lines.append(
+            "Multiple Ascend devices are visible. If other cards are idle, select one first with "
+            "`ASCEND_RT_VISIBLE_DEVICES=<id>` after checking `npu-smi info`."
+        )
+
+    return " ".join(message_lines)
+
+
+def _parse_npu_smi_logical_map(mapping_output: str) -> dict[tuple[str, str], int]:
+    logical_map: dict[tuple[str, str], int] = {}
+    for line in mapping_output.splitlines():
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        npu_id, chip_id, logical_id = parts[:3]
+        if npu_id.isdigit() and chip_id.isdigit() and logical_id.isdigit():
+            logical_map[(npu_id, chip_id)] = int(logical_id)
+    return logical_map
+
+
+def _parse_npu_smi_hbm_stats(
+    info_output: str,
+    logical_map: dict[tuple[str, str], int],
+    visible_device_count: int,
+) -> list[tuple[int, int, int]]:
+    hbm_usage_pattern = re.compile(r"(\d+)\s*/\s*(\d+)\s*$")
+    device_stats: list[tuple[int, int, int]] = []
+    current_npu_id: str | None = None
+    current_health: str | None = None
+
+    for raw_line in info_output.splitlines():
+        line = raw_line.strip()
+        if not line.startswith("|"):
+            continue
+
+        parts = [part.strip() for part in line.strip("|").split("|")]
+        if len(parts) < 3:
+            continue
+
+        left_column = parts[0].split()
+        if len(left_column) >= 2 and left_column[0].isdigit() and parts[1] and ":" not in parts[1]:
+            current_npu_id = left_column[0]
+            current_health = parts[1]
+            continue
+
+        if current_npu_id is None or current_health != "OK":
+            continue
+
+        if len(left_column) != 1 or not left_column[0].isdigit() or ":" not in parts[1]:
+            continue
+
+        chip_id = left_column[0]
+        logical_id = logical_map.get((current_npu_id, chip_id))
+        if logical_id is None or logical_id >= visible_device_count:
+            continue
+
+        hbm_match = hbm_usage_pattern.search(parts[2])
+        if hbm_match is None:
+            continue
+
+        used_memory_mb = int(hbm_match.group(1))
+        total_memory_mb = int(hbm_match.group(2))
+        free_memory_mb = max(0, total_memory_mb - used_memory_mb)
+        device_stats.append((logical_id, free_memory_mb << 20, total_memory_mb << 20))
+
+    return device_stats
+
+
+def _select_best_idle_ascend_device(visible_device_count: int) -> tuple[int, int, int] | None:
+    if visible_device_count <= 1:
+        return None
+
+    mapping_result = subprocess.run(
+        ["npu-smi", "info", "-m"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    if mapping_result.returncode != 0:
+        raise RuntimeError(mapping_result.stderr.strip() or "npu-smi info -m failed")
+
+    info_result = subprocess.run(
+        ["npu-smi", "info"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    if info_result.returncode != 0:
+        raise RuntimeError(info_result.stderr.strip() or "npu-smi info failed")
+
+    logical_map = _parse_npu_smi_logical_map(mapping_result.stdout)
+    device_stats = _parse_npu_smi_hbm_stats(info_result.stdout, logical_map, visible_device_count)
+    if not device_stats:
+        return None
+
+    device_stats.sort(key=lambda item: (-item[1], item[0]))
+    return device_stats[0]
+
+
+def _maybe_auto_select_idle_ascend_device(local_rank: int, parallel_config) -> None:
+    if os.environ.get("ASCEND_RT_VISIBLE_DEVICES"):
+        return
+
+    if local_rank != 0:
+        return
+
+    if getattr(parallel_config, "world_size", 1) != 1:
+        return
+
+    if getattr(parallel_config, "local_world_size", 1) != 1:
+        return
+
+    visible_device_count = torch.npu.device_count() if torch.npu.is_available() else 0
+    if visible_device_count <= 1:
+        return
+
+    try:
+        selected_device = _select_best_idle_ascend_device(visible_device_count)
+    except Exception as exc:
+        logger.info("Unable to auto-select an idle Ascend device: %s", exc)
+        return
+
+    if selected_device is None:
+        return
+
+    logical_id, free_memory, total_memory = selected_device
+    os.environ["ASCEND_RT_VISIBLE_DEVICES"] = str(logical_id)
+    logger.info(
+        "Auto-selected Ascend device %s for single-card startup (free %.2f/%.2f GiB).",
+        logical_id,
+        free_memory / GiB_bytes,
+        total_memory / GiB_bytes,
+    )
 
 
 class NPUWorker(WorkerBase):
@@ -253,6 +419,8 @@ class NPUWorker(WorkerBase):
         self.cache_config.num_cpu_blocks = num_cpu_blocks
 
     def _init_device(self):
+        _maybe_auto_select_idle_ascend_device(self.local_rank, self.parallel_config)
+
         device = torch.device(f"npu:{self.local_rank}")
         torch.npu.set_device(device)
 
@@ -272,15 +440,14 @@ class NPUWorker(WorkerBase):
         self.init_snapshot = MemorySnapshot()
         self.requested_memory = self.init_snapshot.total_memory * self.cache_config.gpu_memory_utilization
         if self.init_snapshot.free_memory < self.requested_memory:
-            GiB = lambda b: round(b / GiB_bytes, 2)
+            visible_device_count = torch.npu.device_count() if torch.npu.is_available() else 0
             raise ValueError(
-                f"Free memory on device "
-                f"({GiB(self.init_snapshot.free_memory)}/"
-                f"{GiB(self.init_snapshot.total_memory)} GiB) on startup "
-                f"is less than desired GPU memory utilization "
-                f"({self.cache_config.gpu_memory_utilization}, "
-                f"{GiB(self.requested_memory)} GiB). Decrease GPU memory "
-                f"utilization or reduce GPU memory used by other processes."
+                _format_startup_memory_error(
+                    free_memory=self.init_snapshot.free_memory,
+                    total_memory=self.init_snapshot.total_memory,
+                    gpu_memory_utilization=self.cache_config.gpu_memory_utilization,
+                    visible_device_count=visible_device_count,
+                )
             )
 
         if (

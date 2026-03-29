@@ -15,11 +15,19 @@
 # limitations under the License.
 #
 
+import os
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from vllm.utils.mem_constants import GiB_bytes
 
 from tests.ut.base import TestBase
+from vllm_ascend.worker.worker import (
+    _format_startup_memory_error,
+    _maybe_auto_select_idle_ascend_device,
+    _parse_npu_smi_hbm_stats,
+    _parse_npu_smi_logical_map,
+)
 
 
 class TestDetermineAvailableMemoryMultiInstance(TestBase):
@@ -246,3 +254,76 @@ class TestDetermineAvailableMemoryMultiInstance(TestBase):
 
         self.assertGreater(result, 0)
         self.assertEqual(result, requested_memory - non_kv_cache)
+
+
+def test_format_startup_memory_error_includes_actionable_guidance(monkeypatch):
+    monkeypatch.delenv("ASCEND_RT_VISIBLE_DEVICES", raising=False)
+
+    message = _format_startup_memory_error(
+        free_memory=int(7.15 * GiB_bytes),
+        total_memory=int(60.96 * GiB_bytes),
+        gpu_memory_utilization=0.9,
+        visible_device_count=8,
+    )
+
+    assert "about 0.10" in message
+    assert "ASCEND_RT_VISIBLE_DEVICES=<id>" in message
+    assert "npu-smi info" in message
+
+
+def test_parse_npu_smi_hbm_stats_prefers_logical_ids_from_mapping():
+    mapping_output = """
+        NPU ID                         Chip ID                        Chip Logic ID                  Chip Name
+        0                              0                              4                              Ascend 910B1
+        1                              0                              7                              Ascend 910B1
+    """
+    info_output = """
++------------------------------------------------------------------------------------------------+
+| NPU   Name                | Health        | Power(W)    Temp(C)           Hugepages-Usage(page)|
+| Chip                      | Bus-Id        | AICore(%)   Memory-Usage(MB)  HBM-Usage(MB)        |
++===========================+===============+====================================================+
+| 0     910B1               | OK            | 97.4        49                0    / 0             |
+| 0                         | 0000:C1:00.0  | 0           0    / 0          58154/ 65536         |
++===========================+===============+====================================================+
+| 1     910B1               | OK            | 94.8        49                0    / 0             |
+| 0                         | 0000:01:00.0  | 0           0    / 0          3413 / 65536         |
++===========================+===============+====================================================+
+    """
+
+    logical_map = _parse_npu_smi_logical_map(mapping_output)
+    device_stats = _parse_npu_smi_hbm_stats(info_output, logical_map, visible_device_count=8)
+
+    assert device_stats == [
+        (4, (65536 - 58154) << 20, 65536 << 20),
+        (7, (65536 - 3413) << 20, 65536 << 20),
+    ]
+
+
+def test_auto_select_idle_ascend_device_sets_visible_device(monkeypatch):
+    monkeypatch.delenv("ASCEND_RT_VISIBLE_DEVICES", raising=False)
+    parallel_config = SimpleNamespace(world_size=1, local_world_size=1)
+
+    with patch("vllm_ascend.worker.worker.logger") as mock_logger, \
+        patch("torch.npu.is_available", return_value=True), \
+        patch("torch.npu.device_count", return_value=8), \
+        patch(
+            "vllm_ascend.worker.worker._select_best_idle_ascend_device",
+            return_value=(6, int(61.5 * GiB_bytes), int(64 * GiB_bytes)),
+        ):
+        _maybe_auto_select_idle_ascend_device(local_rank=0, parallel_config=parallel_config)
+
+    assert os.environ["ASCEND_RT_VISIBLE_DEVICES"] == "6"
+    mock_logger.info.assert_called_once()
+
+
+def test_auto_select_idle_ascend_device_skips_multi_worker(monkeypatch):
+    monkeypatch.delenv("ASCEND_RT_VISIBLE_DEVICES", raising=False)
+    parallel_config = SimpleNamespace(world_size=2, local_world_size=2)
+
+    with patch("torch.npu.is_available", return_value=True), \
+        patch("torch.npu.device_count", return_value=8), \
+        patch("vllm_ascend.worker.worker._select_best_idle_ascend_device") as mock_selector:
+        _maybe_auto_select_idle_ascend_device(local_rank=0, parallel_config=parallel_config)
+
+    assert "ASCEND_RT_VISIBLE_DEVICES" not in os.environ
+    mock_selector.assert_not_called()
