@@ -103,7 +103,12 @@ def get_chip_type() -> str:
         else:
             raise ValueError(f"Unable to recognize chip name: {chip_name}, please manually set env SOC_VERSION")
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Get chip info failed: {e}")
+        logging.warning(
+            "npu-smi command failed, falling back to SOC_VERSION if it is already set. "
+            "Original error: %s",
+            e,
+        )
+        return ""
     except FileNotFoundError:
         logging.warning(
             "npu-smi command not found, if this is an npu envir, please check if npu driver is installed correctly."
