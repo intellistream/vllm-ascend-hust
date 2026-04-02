@@ -15,7 +15,21 @@
 # limitations under the License.
 #
 
+import importlib
+
 from vllm.triton_utils import HAS_TRITON
+from vllm.logger import logger
+
+
+def _import_optional_patch(module_name: str) -> None:
+    try:
+        importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        logger.warning(
+            "Skipping optional worker patch %s because dependency %r is unavailable.",
+            module_name,
+            exc.name,
+        )
 
 if HAS_TRITON:
     import vllm_ascend.patch.worker.patch_triton
@@ -33,13 +47,13 @@ import vllm_ascend.patch.worker.patch_minimax_m2_linear_attn  # noqa
 import vllm_ascend.patch.worker.patch_mamba_utils  # noqa
 import vllm_ascend.patch.worker.patch_multimodal_merge  # noqa
 import vllm_ascend.patch.worker.patch_gdn_attn  # noqa
-import vllm_ascend.patch.worker.patch_qwen3_next  # noqa
-import vllm_ascend.patch.worker.patch_qwen3_next_mtp  # noqa
-import vllm_ascend.patch.worker.patch_qwen3_5  # noqa
+_import_optional_patch("vllm_ascend.patch.worker.patch_qwen3_next")
+_import_optional_patch("vllm_ascend.patch.worker.patch_qwen3_next_mtp")
+_import_optional_patch("vllm_ascend.patch.worker.patch_qwen3_5")
 import vllm_ascend.patch.worker.patch_rejection_sampler  # noqa
 import vllm_ascend.patch.worker.patch_v2.patch_eagle  # noqa
 import vllm_ascend.patch.worker.patch_v2.patch_uva  # noqa
-import vllm_ascend.patch.worker.patch_huanyuan_vl  # noqa
+_import_optional_patch("vllm_ascend.patch.worker.patch_huanyuan_vl")
 import vllm_ascend.patch.worker.patch_routed_experts_capturer  # noqa
 import vllm_ascend.patch.worker.patch_npugraph_ex_triton  # noqa
 import vllm_ascend.patch.worker.patch_kimi_k25  # noqa

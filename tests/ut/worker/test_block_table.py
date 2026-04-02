@@ -254,5 +254,53 @@ class TestBlockTableComputeSlotMapping(TestBase):
                                           test_configs=test_configs)
 
 
+class TestBlockTableRowLifecycle(TestBase):
+    def test_block_table_clear_row_resets_single_row(self):
+        from vllm_ascend.worker.block_table import BlockTable
+
+        block_table = BlockTable(
+            block_size=16,
+            max_num_reqs=2,
+            max_num_blocks_per_req=8,
+            max_num_batched_tokens=32,
+            pin_memory=False,
+            device=torch.device("cpu"),
+            kernel_sizes=[16],
+        )
+
+        block_table.add_row([3, 4, 5], 0)
+        block_table.clear_row(0)
+
+        assert block_table.num_blocks_per_row[0] == 0
+        np.testing.assert_array_equal(
+            block_table.block_table.np[0, :3],
+            np.zeros(3, dtype=np.int32),
+        )
+
+    def test_multi_group_block_table_clear_row_clears_all_groups(self):
+        from vllm_ascend.worker.block_table import MultiGroupBlockTable
+
+        block_table = MultiGroupBlockTable(
+            max_num_reqs=2,
+            max_model_len=64,
+            max_num_batched_tokens=32,
+            pin_memory=False,
+            device=torch.device("cpu"),
+            block_sizes=[16, 32],
+            kernel_sizes=[[16], [32]],
+            max_num_blocks=[8, 4],
+        )
+
+        block_table.add_row(([1, 2], [7]), 0)
+        block_table.clear_row(0)
+
+        for group in block_table.block_tables:
+            assert group.num_blocks_per_row[0] == 0
+            np.testing.assert_array_equal(
+                group.block_table.np[0, :2],
+                np.zeros(2, dtype=np.int32),
+            )
+
+
 if __name__ == '__main__':
     unittest.main()

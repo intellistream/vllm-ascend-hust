@@ -101,21 +101,10 @@ from vllm_ascend.compilation.acl_graph import (
     set_graph_params,
     update_full_graph_params,
 )
-from vllm_ascend.eplb.adaptor.vllm_adaptor import VllmEplbAdaptor
-from vllm_ascend.eplb.core.eplb_device_transfer_loader import D2DExpertWeightLoader
-from vllm_ascend.eplb.core.eplb_worker import EplbProcess
-from vllm_ascend.eplb.eplb_updator import EplbUpdator
-from vllm_ascend.eplb.utils import model_register
 from vllm_ascend.ops.rotary_embedding import set_cos_and_sin, update_cos_sin
 from vllm_ascend.patch.worker.patch_draft_quarot import patch_load_weights
 from vllm_ascend.patch.worker.patch_module import patch_torch_npu_argsort
 from vllm_ascend.sample.sampler import AscendSampler
-from vllm_ascend.spec_decode import get_spec_decode_method
-from vllm_ascend.spec_decode.draft_proposer import AscendDraftModelProposer
-from vllm_ascend.spec_decode.eagle_proposer import AscendEagleProposer
-from vllm_ascend.spec_decode.medusa_proposer import AscendMedusaProposer
-from vllm_ascend.spec_decode.ngram_proposer import AscendNgramProposer
-from vllm_ascend.spec_decode.suffix_proposer import AscendSuffixDecodingProposer
 from vllm_ascend.utils import (
     calc_split_factor,
     check_gdn_layer,
@@ -317,6 +306,11 @@ class NPUModelRunner(GPUModelRunner):
         max_buffer_num_tokens = self.max_num_tokens
         if self.pcp_size * self.dcp_size > 1:
             max_buffer_num_tokens = self.max_num_tokens + self.max_num_reqs * 2 * self.pcp_size
+
+        self.positions = self._make_buffer(max_buffer_num_tokens, dtype=torch.int64)
+        self.seq_lens = self._make_buffer(self.max_num_reqs, dtype=torch.int32)
+
+        if self.pcp_size * self.dcp_size > 1:
             self.pcp_manager = PCPManager(
                 self.pcp_size,
                 self.pcp_rank,
@@ -332,7 +326,6 @@ class NPUModelRunner(GPUModelRunner):
             )
             # TODO(zhenwenqi) after https://github.com/vllm-project/vllm/pull/28988 is merged, we can delete this
             self.input_ids = self._make_buffer(max_buffer_num_tokens, dtype=torch.int32)
-            self.positions = self._make_buffer(max_buffer_num_tokens, dtype=torch.int64)
 
         self._set_up_drafter()
 
@@ -354,6 +347,12 @@ class NPUModelRunner(GPUModelRunner):
         self.dynamic_eplb = eplb_config.dynamic_eplb
         self.eplb_enable = self.dynamic_eplb or (eplb_config.expert_map_path is not None)
         if self.dynamic_eplb:
+            from vllm_ascend.eplb.core.eplb_device_transfer_loader import (
+                D2DExpertWeightLoader,
+            )
+            from vllm_ascend.eplb.core.eplb_worker import EplbProcess
+            from vllm_ascend.eplb.eplb_updator import EplbUpdator
+
             self.is_eplb_warmuped = False
             self.policy_type = eplb_config.eplb_policy_type
             self.eplb_loader = D2DExpertWeightLoader()
@@ -435,14 +434,7 @@ class NPUModelRunner(GPUModelRunner):
 
     def _set_up_drafter(self):
         # Set up speculative decoding.
-        self.drafter: (
-            AscendNgramProposer
-            | AscendEagleProposer
-            | AscendDraftModelProposer
-            | AscendSuffixDecodingProposer
-            | AscendMedusaProposer
-            | None
-        ) = None
+        self.drafter: Any | None = None
         self.actual_seq_lengths_q: list[int] = []
         self.decode_token_per_req = 1
         if self.speculative_config:
@@ -452,13 +444,14 @@ class NPUModelRunner(GPUModelRunner):
             if get_pp_group().is_last_rank:
                 self.drafter = self._get_drafter()
                 if self.speculative_config.method == "eagle3":
-                    assert isinstance(self.drafter, AscendEagleProposer)
                     self.use_aux_hidden_state_outputs = self.drafter.eagle3_use_aux_hidden_state
                 self.rejection_sampler = RejectionSampler(self.sampler)
         self.discard_request_indices = self._make_buffer(self.max_num_reqs, dtype=torch.int64)
         self.num_discarded_requests = 0
 
     def _get_drafter(self):
+        from vllm_ascend.spec_decode import get_spec_decode_method
+
         return get_spec_decode_method(self.speculative_config.method, self.vllm_config, self.device, self)
 
     def _use_aclgraph(self) -> bool:
@@ -636,7 +629,10 @@ class NPUModelRunner(GPUModelRunner):
 
         # Get positions.
         positions_np = self.positions.np[:total_num_scheduled_tokens]
-        cu_num_tokens, arange = self._get_cumsum_and_arange(num_scheduled_tokens)
+        cu_num_tokens = self._get_cumsum_and_arange(
+            num_scheduled_tokens, self.query_pos.np
+        )
+        arange = self.query_pos.np[:total_num_scheduled_tokens]
         np.add(self.input_batch.num_computed_tokens_cpu[req_indices], arange, out=positions_np)
 
         self.input_batch.block_table.compute_slot_mapping(req_indices, positions_np)
@@ -671,7 +667,9 @@ class NPUModelRunner(GPUModelRunner):
             # Re-update after PCP split sequences.
             total_num_scheduled_tokens = sum(num_scheduled_tokens[:num_reqs])
             req_indices = np.repeat(self.arange_np[:num_reqs], num_scheduled_tokens)
-            cu_num_tokens, _ = self._get_cumsum_and_arange(num_scheduled_tokens)
+            cu_num_tokens = self._get_cumsum_and_arange(
+                num_scheduled_tokens, self.query_pos.np
+            )
             positions_np = self.positions.np[:total_num_scheduled_tokens]
             np.add(
                 self.input_batch.num_computed_tokens_cpu[req_indices],
@@ -766,7 +764,12 @@ class NPUModelRunner(GPUModelRunner):
         self.query_start_loc.gpu[num_reqs + 1 :].fill_(-1)
 
         # Copy the tensors to the NPU.
-        self._prepare_input_ids(scheduler_output, total_num_scheduled_tokens, cu_num_tokens)
+        self._prepare_input_ids(
+            scheduler_output,
+            num_reqs,
+            total_num_scheduled_tokens,
+            cu_num_tokens,
+        )
         # Calculate M-RoPE positions.
         # Only relevant for models using M-RoPE (e.g, Qwen2-VL)
         if self.uses_mrope:
@@ -1002,9 +1005,9 @@ class NPUModelRunner(GPUModelRunner):
         if not self.drafter:
             # Speculative decoding is not enabled.
             draft_token_ids = None
-        elif isinstance(self.drafter, (AscendNgramProposer, AscendSuffixDecodingProposer)):
+        elif self.speculative_config.method in {"ngram", "suffix"}:
             draft_token_ids = self.drafter.propose(valid_sampled_token_ids)
-        elif isinstance(self.drafter, AscendMedusaProposer):
+        elif self.speculative_config.method == "medusa":
             draft_token_ids = self.drafter.propose(
                 valid_sampled_token_ids, sampling_metadata, spec_decode_metadata, sample_hidden_states
             )
@@ -2209,7 +2212,7 @@ class NPUModelRunner(GPUModelRunner):
             if kv_cache_gid > 0:
                 cm.block_table_tensor, cm.slot_mapping = _get_block_table_and_slot_mapping(kv_cache_gid)
             if self.speculative_config and spec_decode_common_attn_metadata is None:
-                if isinstance(self.drafter, AscendEagleProposer | AscendDraftModelProposer):
+                if self.speculative_config.use_eagle() or self.speculative_config.uses_draft_model():
                     if self.drafter.attn_layer_names[0] in kv_cache_group.layer_names:
                         spec_decode_common_attn_metadata = cm
                 else:
@@ -2394,7 +2397,9 @@ class NPUModelRunner(GPUModelRunner):
             self.seq_lens.np[num_reqs_padded:] = 0
             self.seq_lens.copy_to_gpu()
 
-            cum_num_tokens, _ = self._get_cumsum_and_arange(num_scheduled_tokens)
+            cum_num_tokens = self._get_cumsum_and_arange(
+                num_scheduled_tokens, self.query_pos.np
+            )
             self.query_start_loc.np[1 : num_reqs_padded + 1] = cum_num_tokens
             self.query_start_loc.copy_to_gpu()
             num_reqs_padded = self._pad_query_start_loc_for_fia(
@@ -2551,6 +2556,8 @@ class NPUModelRunner(GPUModelRunner):
 
     def eplb_warmup(self):
         if self.dynamic_eplb and not self.is_eplb_warmuped:
+            from vllm_ascend.eplb.adaptor.vllm_adaptor import VllmEplbAdaptor
+
             self.is_eplb_warmuped = True
             self.eplb_adaptor = VllmEplbAdaptor(model=self.model)
             self.eplb_loader.set_adator(self.eplb_adaptor)
@@ -2565,6 +2572,8 @@ class NPUModelRunner(GPUModelRunner):
                 self.vllm_config.parallel_config.enable_eplb = True
             self.model: nn.Module = get_model(vllm_config=self.vllm_config)
             if self.dynamic_eplb:
+                from vllm_ascend.eplb.utils import model_register
+
                 model_register(self.model)
             if self.drafter:
                 logger.info("Loading drafter model...")
@@ -2619,7 +2628,6 @@ class NPUModelRunner(GPUModelRunner):
         if self.speculative_config and (
             self.speculative_config.use_eagle() or self.speculative_config.uses_draft_model()
         ):
-            assert isinstance(self.drafter, AscendEagleProposer | AscendDraftModelProposer)
             block_size = (self.kernel_block_sizes[0] if isinstance(
             self.kernel_block_sizes, list) else self.kernel_block_sizes)
             self.drafter.initialize_attn_backend(kv_cache_config, block_size)

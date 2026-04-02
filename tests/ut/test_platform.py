@@ -111,6 +111,36 @@ class TestNPUPlatform(TestBase):
         mock_adapt_patch.assert_called_once_with(is_global_patch=True)
         self.assertEqual(len(mock_action.choices), 2)
 
+    @patch("vllm_ascend.platform.config_deprecated_logging")
+    @patch("vllm_ascend.platform.logger.warning")
+    @patch("vllm_ascend.platform.is_310p", return_value=False)
+    @patch("vllm_ascend.quantization.__getattr__")
+    @patch("vllm_ascend.utils.adapt_patch")
+    def test_pre_register_and_update_skips_missing_optional_quantization_dependency(
+        self,
+        mock_adapt_patch,
+        mock_quant_getattr,
+        _mock_is_310p,
+        mock_warning,
+        mock_config_logging,
+    ):
+        import vllm_ascend.quantization as quantization
+
+        quantization.__dict__.pop("AscendCompressedTensorsConfig", None)
+        quantization.__dict__.pop("AscendModelSlimConfig", None)
+        mock_quant_getattr.side_effect = ModuleNotFoundError(
+            "No module named 'compressed_tensors'"
+        )
+
+        self.platform.pre_register_and_update(None)
+
+        mock_adapt_patch.assert_called_once_with(is_global_patch=True)
+        mock_warning.assert_called_once_with(
+            "Skipping Ascend quantization config registration because optional dependency %r is unavailable.",
+            "compressed_tensors",
+        )
+        mock_config_logging.assert_called_once_with()
+
     def test_apply_config_platform_defaults_sets_ascend_default_max(self):
         test_cases = [
             (40, 3, 160),

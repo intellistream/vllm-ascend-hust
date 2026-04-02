@@ -406,7 +406,7 @@ class AscendAttentionBackendImpl(AttentionImpl):
         )
 
     @staticmethod
-    def _is_fia_runtime_unsupported_error(error: RuntimeError) -> bool:
+    def _is_fia_runtime_unsupported_error(error: Exception) -> bool:
         text = str(error).lower()
         keywords = (
             "not support",
@@ -418,6 +418,8 @@ class AscendAttentionBackendImpl(AttentionImpl):
             "aicore",
             "acl",
             "cann",
+            "nonetype",
+            "key_cache",
         )
         return any(keyword in text for keyword in keywords)
 
@@ -437,7 +439,11 @@ class AscendAttentionBackendImpl(AttentionImpl):
         attn_metadata: AscendMetadata,
         output: torch.Tensor,
     ) -> torch.Tensor:
-        if attn_metadata.attn_state == AscendAttentionState.PrefillNoCache:
+        if (
+            attn_metadata.attn_state == AscendAttentionState.PrefillNoCache
+            or self.key_cache is None
+            or self.value_cache is None
+        ):
             return self._forward_encoder_attention(query, key, value, attn_metadata, output)
         return self.forward_paged_attention(query, attn_metadata, output)
 
@@ -1014,7 +1020,7 @@ class AscendAttentionBackendImpl(AttentionImpl):
         else:
             try:
                 output = self.forward_fused_infer_attention(query, key, value, attn_metadata, output)
-            except RuntimeError as error:
+            except (RuntimeError, AttributeError) as error:
                 if not self._is_fia_runtime_unsupported_error(error):
                     raise
                 self._mark_fia_unsupported(attn_metadata.attn_state, error)
