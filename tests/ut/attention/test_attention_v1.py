@@ -1,12 +1,16 @@
 from unittest.mock import MagicMock, patch
 
 import torch
+from vllm.config import CUDAGraphMode
 
 from tests.ut.base import TestBase
-from vllm_ascend.attention.attention_v1 import (AscendAttentionBackend,
-                                                AscendAttentionBackendImpl,
-                                                AscendAttentionMetadataBuilder,
-                                                AscendAttentionState)
+from vllm_ascend.attention.attention_v1 import (
+    ACLGRAPH_DECODE_ATTENTION_RETRY_ERROR,
+    AscendAttentionBackend,
+    AscendAttentionBackendImpl,
+    AscendAttentionMetadataBuilder,
+    AscendAttentionState,
+)
 from vllm_ascend.attention.utils import AscendCommonAttentionMetadata
 from vllm_ascend.utils import AscendDeviceType
 
@@ -281,6 +285,83 @@ class TestAscendAttentionBackendImpl(TestBase):
         mock_paged_attention.assert_called_once()
         assert output.shape == (4, 8 * 64)
 
+    @patch('vllm_ascend.attention.attention_v1.get_forward_context')
+    @patch('vllm_ascend.attention.attention_v1.using_paged_attention')
+    @patch('torch_npu._npu_paged_attention')
+    @patch('torch_npu._npu_reshape_and_cache')
+    def test_forward_decode_retry_uses_materialized_attention(
+            self,
+            mock_npu_reshape_and_cache,
+            mock_paged_attention,
+            mock_using_paged_attention,
+            mock_get_forward_context):
+        query = torch.randn(4, 8, 64)
+        key = torch.randn(4, 8, 64)
+        value = torch.randn(4, 8, 64)
+        kv_cache = torch.empty(2, 5, 128, 8, 64)
+        output = torch.empty_like(query)
+
+        metadata = self.attn_metadata
+        metadata.attn_state = AscendAttentionState.DecodeOnly
+        metadata.seq_lens = torch.tensor([4, 4, 4, 4])
+        metadata.seq_lens_list = [4, 4, 4, 4]
+        metadata.actual_seq_lengths_q = [1, 2, 3, 4]
+        metadata.block_tables = torch.zeros(4, 5, dtype=torch.long)
+        metadata.num_actual_tokens = 4
+        metadata.slot_mapping = torch.zeros(4, dtype=torch.long)
+        metadata.num_decodes = 4
+        metadata.num_prefills = 0
+        layer = self.layer_no_quant
+
+        mock_using_paged_attention.return_value = True
+        mock_get_forward_context.return_value = MagicMock(
+            capturing=False,
+            cudagraph_runtime_mode=CUDAGraphMode.NONE,
+            skip_compiled=True,
+        )
+
+        with patch.object(
+            self.impl,
+            '_forward_decode_materialized_attention',
+            return_value=output,
+        ) as mock_materialized_attention:
+            result = self.impl.forward(layer, query, key, value, kv_cache,
+                                       metadata, output)
+
+        mock_materialized_attention.assert_called_once()
+        mock_paged_attention.assert_not_called()
+        self.assertIs(result, output)
+
+    @patch('torch_npu._npu_reshape_and_cache')
+    def test_reshape_and_cache_accepts_packed_kv_cache_container(
+            self,
+            mock_npu_reshape_and_cache):
+        query = torch.randn(4, 8, 64)
+        key = torch.randn(4, 8, 64)
+        value = torch.randn(4, 8, 64)
+        packed_kv_cache = torch.empty(2, 5, 128, 8, 64)
+        output = torch.empty_like(query)
+
+        metadata = self.attn_metadata
+        metadata.attn_state = AscendAttentionState.DecodeOnly
+        metadata.num_actual_tokens = 4
+        metadata.slot_mapping = torch.zeros(4, dtype=torch.long)
+
+        self.impl.key_cache = None
+        self.impl.value_cache = None
+        self.impl.reshape_and_cache(
+            query,
+            key,
+            value,
+            [packed_kv_cache],
+            metadata,
+            output,
+        )
+
+        self.assertEqual(self.impl.key_cache.data_ptr(), packed_kv_cache[0].data_ptr())
+        self.assertEqual(self.impl.value_cache.data_ptr(), packed_kv_cache[1].data_ptr())
+        mock_npu_reshape_and_cache.assert_called_once()
+
     @patch('vllm_ascend.ascend_forward_context.get_forward_context')
     @patch('torch_npu.npu_fused_infer_attention_score')
     @patch('torch_npu._npu_reshape_and_cache')
@@ -432,3 +513,39 @@ class TestAscendAttentionBackendImpl(TestBase):
                           metadata, output)
 
         mock_npu_fusion_attention.assert_called_once()
+
+    @patch('vllm_ascend.attention.attention_v1.using_paged_attention', return_value=False)
+    @patch('vllm_ascend.attention.attention_v1.get_forward_context')
+    @patch('torch_npu._npu_reshape_and_cache')
+    def test_decode_only_fia_error_raises_aclgraph_retry(
+            self,
+            mock_npu_reshape_and_cache,
+            mock_get_forward_context,
+            mock_using_paged_attention):
+        query = torch.randn(4, 8 * 64)
+        key = torch.randn(4, 8 * 64)
+        value = torch.randn(4, 8 * 64)
+        kv_cache = torch.empty(2, 5, 128, 8, 64)
+        output = torch.empty_like(query)
+
+        metadata = self.attn_metadata
+        metadata.attn_state = AscendAttentionState.DecodeOnly
+        metadata.seq_lens = torch.tensor([4])
+        metadata.block_tables = torch.zeros(1, 5, dtype=torch.long)
+        metadata.num_actual_tokens = 4
+        metadata.slot_mapping = torch.zeros(4, dtype=torch.long)
+        metadata.num_decodes = 4
+        metadata.num_prefills = 0
+
+        mock_get_forward_context.return_value = MagicMock(
+            capturing=False,
+            cudagraph_runtime_mode=CUDAGraphMode.PIECEWISE,
+        )
+
+        self.impl.forward_fused_infer_attention = MagicMock(
+            side_effect=RuntimeError("TND shape unsupported")
+        )
+
+        with self.assertRaisesRegex(RuntimeError, ACLGRAPH_DECODE_ATTENTION_RETRY_ERROR):
+            self.impl.forward(self.layer_no_quant, query, key, value,
+                              kv_cache, metadata, output)

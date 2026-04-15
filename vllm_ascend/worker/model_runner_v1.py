@@ -90,7 +90,10 @@ from vllm.v1.worker.utils import AttentionGroup
 
 # yapf: enable
 from vllm_ascend.ascend_config import get_ascend_config
-from vllm_ascend.attention.attention_v1 import AscendAttentionState
+from vllm_ascend.attention.attention_v1 import (
+    ACLGRAPH_DECODE_ATTENTION_RETRY_ERROR,
+    AscendAttentionState,
+)
 from vllm_ascend.attention.utils import AscendCommonAttentionMetadata, using_paged_attention
 
 # yapf conflicts with isort for this block
@@ -545,6 +548,44 @@ class NPUModelRunner(GPUModelRunner):
         if isinstance(self.model, ACLGraphWrapper):
             return self.model.unwrap()
         return self.model
+
+    @staticmethod
+    def _is_retryable_aclgraph_attention_failure(exc: RuntimeError) -> bool:
+        error_text = str(exc)
+        return (
+            "PagedAttentionOperation" in error_text
+            or "current working operator name is PagedAttentionOperation" in error_text
+            or ACLGRAPH_DECODE_ATTENTION_RETRY_ERROR in error_text
+        )
+
+    def _fallback_to_eager_after_aclgraph_failure(
+        self,
+        exc: RuntimeError,
+        *args,
+        **kwargs,
+    ):
+        forward_context = get_forward_context()
+        if (
+            forward_context is None
+            or forward_context.cudagraph_runtime_mode == CUDAGraphMode.NONE
+            or not self._is_retryable_aclgraph_attention_failure(exc)
+        ):
+            raise exc
+
+        logger.warning(
+            "Attention failed under ACL Graph runtime mode %s; "
+            "retrying this batch in eager mode.",
+            forward_context.cudagraph_runtime_mode,
+        )
+        forward_context.cudagraph_runtime_mode = CUDAGraphMode.NONE
+        forward_context.capturing = False
+        previous_skip_compiled = forward_context.skip_compiled
+        forward_context.skip_compiled = True
+        model = self.get_model()
+        try:
+            return model(*args, **kwargs)
+        finally:
+            forward_context.skip_compiled = previous_skip_compiled
 
     def _pad_query_start_loc_for_fia(
         self,
@@ -1817,13 +1858,23 @@ class NPUModelRunner(GPUModelRunner):
         **model_kwargs: dict[str, Any],
     ):
         assert self.model is not None
-        hidden_states = self.model(
-            input_ids=input_ids,
-            positions=positions,
-            intermediate_tensors=intermediate_tensors,
-            inputs_embeds=inputs_embeds,
-            **model_kwargs,
-        )
+        try:
+            hidden_states = self.model(
+                input_ids=input_ids,
+                positions=positions,
+                intermediate_tensors=intermediate_tensors,
+                inputs_embeds=inputs_embeds,
+                **model_kwargs,
+            )
+        except RuntimeError as exc:
+            hidden_states = self._fallback_to_eager_after_aclgraph_failure(
+                exc,
+                input_ids=input_ids,
+                positions=positions,
+                intermediate_tensors=intermediate_tensors,
+                inputs_embeds=inputs_embeds,
+                **model_kwargs,
+            )
         forward_context = get_forward_context()
         assert forward_context is not None
         if (
