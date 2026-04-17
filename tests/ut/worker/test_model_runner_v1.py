@@ -1,10 +1,12 @@
 import unittest
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import torch
+from vllm.config import CompilationMode, CUDAGraphMode
 from vllm.v1.kv_cache_interface import FullAttentionSpec, KVCacheConfig, KVCacheGroupSpec, KVCacheTensor
 
+from vllm_ascend.attention.attention_v1 import ACLGRAPH_DECODE_ATTENTION_RETRY_ERROR
 from vllm_ascend.worker.model_runner_v1 import NPUModelRunner
 
 
@@ -83,6 +85,114 @@ class TestNPUModelRunnerKVCache(unittest.TestCase):
 
         self.assertEqual(k_cache.shape, (2, 16, 8, 64))
         self.assertEqual(v_cache.shape, (2, 16, 8, 64))
+
+
+class TestNPUModelRunnerACLGraphFallback(unittest.TestCase):
+
+    def _build_runner(self):
+        runner = NPUModelRunner.__new__(NPUModelRunner)
+        runner.use_sparse = False
+        runner.model_config = SimpleNamespace(enforce_eager=False)
+        runner.compilation_config = SimpleNamespace(
+            cudagraph_mode=CUDAGraphMode.PIECEWISE,
+            mode=CompilationMode.VLLM_COMPILE,
+        )
+        runner.vllm_config = SimpleNamespace(
+            model_config=SimpleNamespace(enforce_eager=False),
+        )
+        runner.attn_backend = MagicMock()
+        return runner
+
+    @patch("vllm_ascend.worker.model_runner_v1.get_forward_context")
+    def test_model_forward_falls_back_to_eager_after_paged_attention_failure(
+        self,
+        mock_get_forward_context,
+    ):
+        runner = self._build_runner()
+        runner.model = MagicMock(
+            side_effect=RuntimeError(
+                "The current working operator name is PagedAttentionOperation"
+            )
+        )
+        def raw_model_call(*args, **kwargs):
+            self.assertTrue(forward_context.skip_compiled)
+            return "ok"
+
+        raw_model = MagicMock(side_effect=raw_model_call)
+        runner.get_model = MagicMock(return_value=raw_model)
+        forward_context = SimpleNamespace(
+            cudagraph_runtime_mode=CUDAGraphMode.PIECEWISE,
+            capturing=False,
+            flash_comm_v1_enabled=False,
+            skip_compiled=False,
+        )
+        mock_get_forward_context.return_value = forward_context
+
+        result = runner._model_forward(num_tokens_padded=1)
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(runner.model.call_count, 1)
+        raw_model.assert_called_once()
+        self.assertFalse(runner.model_config.enforce_eager)
+        self.assertFalse(runner.vllm_config.model_config.enforce_eager)
+        self.assertEqual(runner.compilation_config.cudagraph_mode, CUDAGraphMode.PIECEWISE)
+        self.assertEqual(runner.compilation_config.mode, CompilationMode.VLLM_COMPILE)
+        self.assertEqual(forward_context.cudagraph_runtime_mode, CUDAGraphMode.NONE)
+        self.assertFalse(forward_context.skip_compiled)
+
+    @patch("vllm_ascend.worker.model_runner_v1.get_forward_context")
+    def test_model_forward_retries_custom_aclgraph_attention_failure(
+        self,
+        mock_get_forward_context,
+    ):
+        runner = self._build_runner()
+        runner.model = MagicMock(
+            side_effect=RuntimeError(ACLGRAPH_DECODE_ATTENTION_RETRY_ERROR)
+        )
+        def raw_model_call(*args, **kwargs):
+            self.assertTrue(forward_context.skip_compiled)
+            return "ok"
+
+        raw_model = MagicMock(side_effect=raw_model_call)
+        runner.get_model = MagicMock(return_value=raw_model)
+        forward_context = SimpleNamespace(
+            cudagraph_runtime_mode=CUDAGraphMode.PIECEWISE,
+            capturing=False,
+            flash_comm_v1_enabled=False,
+            skip_compiled=False,
+        )
+        mock_get_forward_context.return_value = forward_context
+
+        result = runner._model_forward(num_tokens_padded=1)
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(runner.model.call_count, 1)
+        raw_model.assert_called_once()
+        self.assertEqual(forward_context.cudagraph_runtime_mode, CUDAGraphMode.NONE)
+        self.assertFalse(forward_context.skip_compiled)
+
+    @patch("vllm_ascend.worker.model_runner_v1.get_forward_context")
+    def test_model_forward_does_not_swallow_non_paged_attention_runtime_error(
+        self,
+        mock_get_forward_context,
+    ):
+        runner = self._build_runner()
+        runner.model = MagicMock(side_effect=RuntimeError("acl api failed"))
+        mock_get_forward_context.return_value = SimpleNamespace(
+            cudagraph_runtime_mode=CUDAGraphMode.PIECEWISE,
+            capturing=False,
+            flash_comm_v1_enabled=False,
+            skip_compiled=False,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "acl api failed"):
+            runner._model_forward(num_tokens_padded=1)
+
+        self.assertFalse(runner.model_config.enforce_eager)
+        self.assertEqual(
+            runner.compilation_config.cudagraph_mode,
+            CUDAGraphMode.PIECEWISE,
+        )
 
 
 if __name__ == "__main__":

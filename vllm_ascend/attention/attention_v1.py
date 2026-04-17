@@ -20,9 +20,11 @@ from enum import Enum
 from typing import ClassVar
 
 import torch
+import torch.nn.functional as F
 import torch_npu
 import vllm.envs as envs_vllm
-from vllm.config import VllmConfig, get_current_vllm_config
+from vllm.config import CUDAGraphMode, VllmConfig, get_current_vllm_config
+from vllm.forward_context import get_forward_context
 from vllm.logger import init_logger
 from vllm.utils.math_utils import cdiv
 from vllm.v1.attention.backend import (  # type: ignore
@@ -63,6 +65,8 @@ from vllm_ascend.utils import weak_ref_tensors
 SWA_INT_MAX = 2147483647
 
 logger = init_logger(__name__)
+
+ACLGRAPH_DECODE_ATTENTION_RETRY_ERROR = "ACLGraph decode attention fallback should retry eagerly"
 
 
 @register_backend(AttentionBackendEnum.CUSTOM, "ASCEND")
@@ -431,6 +435,14 @@ class AscendAttentionBackendImpl(AttentionImpl):
         self._fia_unsupported_profiles.add((self.head_size, attn_state))
         self._log_fused_attention_fallback(attn_state, str(error))
 
+    @staticmethod
+    def _is_aclgraph_runtime_active() -> bool:
+        forward_context = get_forward_context()
+        return (
+            forward_context is not None
+            and forward_context.cudagraph_runtime_mode != CUDAGraphMode.NONE
+        )
+
     def _fallback_when_fia_unavailable(
         self,
         query: torch.Tensor,
@@ -440,12 +452,123 @@ class AscendAttentionBackendImpl(AttentionImpl):
         output: torch.Tensor,
     ) -> torch.Tensor:
         if (
+            attn_metadata.attn_state == AscendAttentionState.DecodeOnly
+            and self._is_aclgraph_runtime_active()
+        ):
+            raise RuntimeError(
+                f"{ACLGRAPH_DECODE_ATTENTION_RETRY_ERROR}: "
+                f"head_size={self.head_size}, state={attn_metadata.attn_state.name}"
+            )
+        if (
             attn_metadata.attn_state == AscendAttentionState.PrefillNoCache
             or self.key_cache is None
             or self.value_cache is None
         ):
             return self._forward_encoder_attention(query, key, value, attn_metadata, output)
         return self.forward_paged_attention(query, attn_metadata, output)
+
+    @staticmethod
+    def _should_use_decode_materialized_attention() -> bool:
+        forward_context = get_forward_context()
+        return (
+            forward_context is not None
+            and forward_context.cudagraph_runtime_mode == CUDAGraphMode.NONE
+            and getattr(forward_context, "skip_compiled", False)
+        )
+
+    def _materialize_decode_kv_cache(
+        self,
+        kv_cache: tuple[torch.Tensor],
+        attn_metadata: AscendMetadata,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        key_cache, value_cache = self._resolve_kv_cache_tensors(kv_cache)
+        if key_cache is None or value_cache is None:
+            raise RuntimeError(
+                "Unable to resolve decode KV cache for materialized fallback: "
+                f"kv_cache_type={type(kv_cache).__name__}, "
+                f"kv_cache_len={len(kv_cache) if not isinstance(kv_cache, torch.Tensor) else 'tensor'}, "
+                f"first_entry_type={type(kv_cache[0]).__name__ if not isinstance(kv_cache, torch.Tensor) and len(kv_cache) > 0 else 'n/a'}, "
+                f"first_entry_shape={tuple(kv_cache[0].shape) if not isinstance(kv_cache, torch.Tensor) and len(kv_cache) > 0 and isinstance(kv_cache[0], torch.Tensor) else 'n/a'}, "
+                f"self_key_cache_set={self.key_cache is not None}, "
+                f"self_value_cache_set={self.value_cache is not None}"
+            )
+
+        _, block_size, _, _ = key_cache.shape
+        materialized_keys: list[torch.Tensor] = []
+        materialized_values: list[torch.Tensor] = []
+
+        for request_index, seq_len in enumerate(attn_metadata.seq_lens_list):
+            num_blocks = cdiv(seq_len, block_size)
+            block_indices = attn_metadata.block_tables[request_index, :num_blocks].to(
+                device=key_cache.device,
+                dtype=torch.long,
+            )
+            request_keys = key_cache.index_select(0, block_indices).reshape(
+                -1, self.num_kv_heads, self.head_size
+            )[:seq_len]
+            request_values = value_cache.index_select(0, block_indices).reshape(
+                -1, self.num_kv_heads, self.head_size
+            )[:seq_len]
+            materialized_keys.append(request_keys)
+            materialized_values.append(request_values)
+
+        return torch.cat(materialized_keys, dim=0), torch.cat(materialized_values, dim=0)
+
+    def _resolve_kv_cache_tensors(
+        self,
+        kv_cache,
+    ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+        if self.key_cache is not None and self.value_cache is not None:
+            return self.key_cache, self.value_cache
+
+        if isinstance(kv_cache, torch.Tensor):
+            if kv_cache.ndim > 0 and kv_cache.shape[0] >= 2:
+                return kv_cache[0], kv_cache[1]
+            return None, None
+
+        if len(kv_cache) > 1:
+            return kv_cache[0], kv_cache[1]
+
+        if len(kv_cache) == 1 and isinstance(kv_cache[0], torch.Tensor):
+            packed_kv_cache = kv_cache[0]
+            if packed_kv_cache.ndim > 0 and packed_kv_cache.shape[0] >= 2:
+                return packed_kv_cache[0], packed_kv_cache[1]
+
+        if len(kv_cache) == 1 and isinstance(kv_cache[0], (list, tuple)):
+            nested_kv_cache = kv_cache[0]
+            if len(nested_kv_cache) > 1:
+                return nested_kv_cache[0], nested_kv_cache[1]
+
+        return None, None
+
+    def _forward_decode_materialized_attention(
+        self,
+        query: torch.Tensor,
+        kv_cache: tuple[torch.Tensor],
+        attn_metadata: AscendMetadata,
+        output: torch.Tensor,
+    ) -> torch.Tensor:
+        key, value = self._materialize_decode_kv_cache(kv_cache, attn_metadata)
+        if self.num_queries_per_kv > 1:
+            key = key.repeat_interleave(self.num_queries_per_kv, dim=1)
+            value = value.repeat_interleave(self.num_queries_per_kv, dim=1)
+
+        start = 0
+        for request_index, seq_len in enumerate(attn_metadata.seq_lens_list):
+            end = start + seq_len
+            query_slice = query[request_index : request_index + 1].transpose(0, 1).unsqueeze(0)
+            key_slice = key[start:end].transpose(0, 1).unsqueeze(0)
+            value_slice = value[start:end].transpose(0, 1).unsqueeze(0)
+            attn_output = F.scaled_dot_product_attention(
+                query_slice,
+                key_slice,
+                value_slice,
+                scale=self.scale,
+            )
+            output[request_index : request_index + 1] = attn_output.squeeze(0).transpose(0, 1)
+            start = end
+
+        return output
 
     @staticmethod
     def update_graph_params(
@@ -971,11 +1094,12 @@ class AscendAttentionBackendImpl(AttentionImpl):
         attn_metadata: AscendMetadata,
         output: torch.Tensor,
     ):
-        if len(kv_cache) > 1:
+        key_cache, value_cache = self._resolve_kv_cache_tensors(kv_cache)
+        if key_cache is not None and value_cache is not None:
             if self.is_kv_producer:
                 attn_metadata.reshape_cache_event = torch.npu.Event()
-            if self.key_cache is None:
-                self.key_cache, self.value_cache = kv_cache[0], kv_cache[1]
+            if self.key_cache is None or self.value_cache is None:
+                self.key_cache, self.value_cache = key_cache, value_cache
             slots = attn_metadata.slot_mapping
             encoder_decoder = self.attn_type == AttentionType.ENCODER_DECODER
             DeviceOperator.reshape_and_cache(
@@ -1012,11 +1136,31 @@ class AscendAttentionBackendImpl(AttentionImpl):
             attn_metadata.attn_state == AscendAttentionState.DecodeOnly
             and self.sliding_window is None
             and (
-                using_paged_attention(num_tokens, self.vllm_config)
+                self._should_use_decode_materialized_attention()
+                or using_paged_attention(num_tokens, self.vllm_config)
                 or not self._supports_tnd_fused_infer_attention(attn_metadata.attn_state)
             )
         ):
-            output = self.forward_paged_attention(query, attn_metadata, output)
+            if self._should_use_decode_materialized_attention():
+                output = self._forward_decode_materialized_attention(
+                    query,
+                    kv_cache,
+                    attn_metadata,
+                    output,
+                )
+            elif (
+                using_paged_attention(num_tokens, self.vllm_config)
+                or not self._supports_tnd_fused_infer_attention(attn_metadata.attn_state)
+            ):
+                if (
+                not self._supports_tnd_fused_infer_attention(attn_metadata.attn_state)
+                and self._is_aclgraph_runtime_active()
+                ):
+                    raise RuntimeError(
+                        f"{ACLGRAPH_DECODE_ATTENTION_RETRY_ERROR}: "
+                        f"head_size={self.head_size}, state={attn_metadata.attn_state.name}"
+                    )
+                output = self.forward_paged_attention(query, attn_metadata, output)
         else:
             try:
                 output = self.forward_fused_infer_attention(query, key, value, attn_metadata, output)
