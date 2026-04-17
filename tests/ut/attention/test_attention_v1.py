@@ -436,7 +436,7 @@ class TestAscendAttentionBackendImpl(TestBase):
     @patch('torch_npu._npu_paged_attention')
     @patch('torch_npu.npu_fused_infer_attention_score')
     @patch('torch_npu._npu_reshape_and_cache')
-    def test_prefill_cache_hit_fia_error_fallback_and_quarantine(
+    def test_prefill_cache_hit_fia_error_fallback_to_paged_attention(
             self,
             mock_npu_reshape_and_cache,
             mock_fused_infer_attention_score,
@@ -471,8 +471,12 @@ class TestAscendAttentionBackendImpl(TestBase):
         self.impl.forward(self.layer_no_quant, query, key, value, kv_cache,
                           metadata, output)
 
-        self.assertEqual(mock_fused_infer_attention_score.call_count, 1)
+        self.assertEqual(mock_fused_infer_attention_score.call_count, 2)
         self.assertEqual(mock_paged_attention.call_count, 2)
+        self.assertIn(
+            (self.impl.head_size, AscendAttentionState.PrefillCacheHit),
+            AscendAttentionBackendImpl._fia_unsupported_profiles,
+        )
 
     @patch('vllm_ascend.ascend_forward_context.get_forward_context')
     @patch('torch_npu.npu_fusion_attention')
