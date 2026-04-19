@@ -41,7 +41,11 @@ vLLM Ascend Plugin
 
 ## Overview
 
-vLLM Ascend (`vllm-ascend`) is a community maintained hardware plugin for running vLLM seamlessly on the Ascend NPU.
+vLLM Hust Ascend (`vllm-ascend-hust`) is the localized distribution of the
+vLLM Ascend hardware plugin for running `vllm-hust` on the Ascend NPU.
+
+The Python import/module namespace remains `vllm_ascend` for compatibility
+with the upstream plugin interface and existing runtime code.
 
 It is the recommended approach for supporting the Ascend backend within the vLLM community. It adheres to the principles outlined in the [[RFC]: Hardware pluggable](https://github.com/vllm-project/vllm/issues/11162), providing a hardware-pluggable interface that decouples the integration of the Ascend NPU with vLLM.
 
@@ -55,7 +59,7 @@ By using vLLM Ascend plugin, popular open-source models, including Transformer-l
     - Python >= 3.10, < 3.12
     - CANN == 8.5.0 (Ascend HDK version refers to [here](https://www.hiascend.com/document/detail/zh/canncommercial/83RC2/releasenote/releasenote_0000.html))
     - PyTorch == 2.9.0, torch-npu == 2.9.0
-    - vLLM (the same version as vllm-ascend)
+    - vLLM / vLLM Hust (the same compatible version as vllm-ascend-hust)
 
 ## Getting Started
 
@@ -68,13 +72,17 @@ Please use the following recommended versions to get started quickly:
 
 ## Local Workspace Helpers
 
+This fork keeps the Python import/module namespace as `vllm_ascend`, while the
+distribution package name for packaging and PyPI publication is
+`vllm-ascend-hust`.
+
 For the local `vllm-hust` multi-root workspace, Ascend-specific helper scripts
 are kept under `scripts/` in this repository rather than in `vllm-hust`.
 
 Common examples:
 
 ```bash
-# install a local vllm-ascend plugin checkout into the current Python env
+# install the local vllm-ascend-hust checkout into the current Python env
 bash scripts/install_local_ascend_plugin.sh
 
 # source a single Ascend runtime into the current shell
@@ -92,19 +100,21 @@ bash scripts/doctor_ascend_env.sh
 
 ## Contributing
 
-See [CONTRIBUTING](https://docs.vllm.ai/projects/ascend/en/latest/developer_guide/contribution/index.html) for more details, which is a step-by-step guide to help you set up the development environment, build and test.
+See [CONTRIBUTING](CONTRIBUTING.md) for the fork-specific development,
+build, and test workflow.
 
 We welcome and value any contributions and collaborations:
 
-- Please let us know if you encounter a bug by [filing an issue](https://github.com/vllm-project/vllm-ascend/issues)
+- Please let us know if you encounter a bug by [filing an issue](https://github.com/intellistream/vllm-ascend-hust/issues)
 - Please use [User forum](https://discuss.vllm.ai/c/hardware-support/vllm-ascend-support) for usage questions and help.
 
 ## Branch
 
-vllm-ascend has a main branch and a dev branch.
+vllm-ascend-hust keeps a main branch and may carry release branches that track
+the compatible upstream vLLM / vLLM Ascend baselines.
 
-- **main**: main branch, corresponds to the vLLM main branch, and is continuously monitored for quality through Ascend CI.
-- **releases/vX.Y.Z**: development branch, created alongside new releases of vLLM. For example, `releases/v0.13.0` is the dev branch for vLLM `v0.13.0` version.
+- **main**: primary development branch for the localized fork.
+- **releases/vX.Y.Z**: optional release branches used when this fork needs to pin to a specific compatible upstream release line.
 
 Below are the maintained branches:
 

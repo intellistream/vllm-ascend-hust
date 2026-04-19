@@ -42,7 +42,7 @@ function install_binary_test() {
     PIP_VLLM_VERSION=$(get_version pip_vllm_version)
     VLLM_VERSION=$(get_version vllm_version)
     PIP_VLLM_ASCEND_VERSION=$(get_version pip_vllm_ascend_version)
-    _info "====> Install vllm==${PIP_VLLM_VERSION} and vllm-ascend ${PIP_VLLM_ASCEND_VERSION}"
+    _info "====> Install vllm==${PIP_VLLM_VERSION} and vllm-ascend-hust ${PIP_VLLM_ASCEND_VERSION}"
 
     # Setup extra-index-url for x86 & torch_npu dev version
     pip config set global.extra-index-url "https://download.pytorch.org/whl/cpu/ https://mirrors.huaweicloud.com/ascend/repos/pypi"
@@ -50,7 +50,7 @@ function install_binary_test() {
     # The vLLM version already in pypi, we install from pypi.
     pip install vllm=="${PIP_VLLM_VERSION}"
 
-    pip install vllm-ascend=="${PIP_VLLM_ASCEND_VERSION}"
+    pip install vllm-ascend-hust=="${PIP_VLLM_ASCEND_VERSION}"
 
     pip list | grep vllm
 

@@ -6,6 +6,10 @@ This document explains how to write E2E tests and unit tests to verify the imple
 
 The fastest way to set up a test environment is to use the main branch's container image:
 
+:::{note}
+The official container image name remains `quay.io/ascend/vllm-ascend:*`, but the fork repository and recommended local checkout name are `vllm-ascend-hust`.
+:::
+
 :::::{tab-set}
 :sync-group: e2e
 
@@ -20,7 +24,7 @@ You can run the unit tests on CPUs with the following steps:
 
 cd ~/vllm-project/
 # ls
-# vllm  vllm-ascend
+# vllm  vllm-ascend-hust
 
 # Use mirror to speed up download
 # docker pull quay.nju.edu.cn/ascend/cann:|cann_image_tag|
@@ -44,7 +48,7 @@ mkdir -p $SRC_WORKSPACE
 apt-get update -y
 apt-get install -y python3-pip git vim wget net-tools gcc g++ cmake libnuma-dev curl gnupg2
 
-git clone -b |vllm_ascend_version| --depth 1 https://github.com/vllm-project/vllm-ascend.git
+git clone -b |vllm_ascend_version| --depth 1 https://github.com/intellistream/vllm-ascend-hust.git
 git clone --depth 1 https://github.com/vllm-project/vllm.git
 
 # vllm
@@ -52,11 +56,11 @@ cd $SRC_WORKSPACE/vllm
 VLLM_TARGET_DEVICE=empty python3 -m pip install .
 python3 -m pip uninstall -y triton
 
-# vllm-ascend
-cd $SRC_WORKSPACE/vllm-ascend
+# vllm-ascend-hust
+cd $SRC_WORKSPACE/vllm-ascend-hust
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/Ascend/ascend-toolkit/latest/$(uname -m)-linux/devlib
 # For cpu environment, set SOC_VERSION for different chips.
-# See https://github.com/vllm-project/vllm-ascend/blob/3cb0af0bcf3299089ca7e72159fa36e825a470f8/setup.py#L132 for detail.
+# See https://github.com/intellistream/vllm-ascend-hust/blob/main/setup.py for detail.
 export SOC_VERSION="ascend910b1"
 python3 -m pip install -v .
 python3 -m pip install -r requirements-dev.txt
@@ -133,7 +137,7 @@ docker run --rm \
 After starting the container, you should install the required packages:
 
 ```bash
-cd /vllm-workspace/vllm-ascend/
+cd /vllm-workspace/vllm-ascend-hust/
 
 # Prepare
 pip config set global.index-url https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
@@ -155,7 +159,7 @@ There are several principles to follow when writing unit tests:
 - The test file path should be consistent with the source file and start with the `test_` prefix, such as: `vllm_ascend/worker/worker.py` --> `tests/ut/worker/test_worker.py`
 - The vLLM Ascend test uses unittest framework. See [here](https://docs.python.org/3/library/unittest.html#module-unittest) to understand how to write unit tests.
 - All unit tests can be run on CPUs, so you must mock the device-related function to host.
-- Example: [tests/ut/test_ascend_config.py](https://github.com/vllm-project/vllm-ascend/blob/main/tests/ut/test_ascend_config.py).
+- Example: [tests/ut/test_ascend_config.py](https://github.com/intellistream/vllm-ascend-hust/blob/main/tests/ut/test_ascend_config.py).
 - You can run the unit tests using `pytest`:
 
 :::::{tab-set}
@@ -177,7 +181,7 @@ TORCH_DEVICE_BACKEND_AUTOLOAD=0 pytest -sv tests/ut
 :sync: single
 
 ```bash
-cd /vllm-workspace/vllm-ascend/
+cd /vllm-workspace/vllm-ascend-hust/
 # Run all single-card tests
 pytest -sv tests/ut
 
@@ -191,7 +195,7 @@ pytest -sv tests/ut/test_ascend_config.py
 :sync: multi
 
 ```bash
-cd /vllm-workspace/vllm-ascend/
+cd /vllm-workspace/vllm-ascend-hust/
 # Run all multi-card tests
 pytest -sv tests/ut
 
@@ -205,7 +209,7 @@ pytest -sv tests/ut/test_ascend_config.py
 
 ### E2E test
 
-Although vllm-ascend CI provides the [E2E test](https://github.com/vllm-project/vllm-ascend/blob/main/.github/workflows/vllm_ascend_test.yaml) on Ascend CI, you can run it
+Although `vllm-ascend-hust` CI provides the [E2E test](https://github.com/intellistream/vllm-ascend-hust/blob/main/.github/workflows/vllm_ascend_test.yaml) on Ascend CI, you can run it
 locally.
 
 :::::{tab-set}
@@ -222,7 +226,7 @@ You can't run the E2E test on CPUs.
 :sync: single
 
 ```bash
-cd /vllm-workspace/vllm-ascend/
+cd /vllm-workspace/vllm-ascend-hust/
 # Run all single-card tests
 VLLM_USE_MODELSCOPE=true pytest -sv tests/e2e/singlecard/
 
@@ -239,7 +243,7 @@ VLLM_USE_MODELSCOPE=true pytest -sv tests/e2e/singlecard/test_offline_inference.
 :sync: multi
 
 ```bash
-cd /vllm-workspace/vllm-ascend/
+cd /vllm-workspace/vllm-ascend-hust/
 # Run all multi-card tests
 VLLM_USE_MODELSCOPE=true pytest -sv tests/e2e/singlecard/
 
@@ -254,15 +258,15 @@ VLLM_USE_MODELSCOPE=true pytest -sv tests/e2e/singlecard/test_aclgraph_accuracy.
 
 :::::
 
-This will reproduce the E2E test. See [vllm_ascend_test.yaml](https://github.com/vllm-project/vllm-ascend/blob/main/.github/workflows/vllm_ascend_test.yaml).
+This will reproduce the E2E test. See [vllm_ascend_test.yaml](https://github.com/intellistream/vllm-ascend-hust/blob/main/.github/workflows/vllm_ascend_test.yaml).
 
 For running nightly multi-node test cases locally, refer to the `Running Locally` section in [Multi Node Test](./multi_node_test.md).
 
 #### E2E test example
 
-- Offline test example: [`tests/e2e/singlecard/test_offline_inference.py`](https://github.com/vllm-project/vllm-ascend/blob/main/tests/e2e/singlecard/test_offline_inference.py)
-- Online test examples: [`tests/e2e/singlecard/test_prompt_embedding.py`](https://github.com/vllm-project/vllm-ascend/blob/main/tests/e2e/singlecard/test_prompt_embedding.py)
-- Correctness test example: [`tests/e2e/singlecard/test_aclgraph_accuracy.py`](https://github.com/vllm-project/vllm-ascend/blob/main/tests/e2e/singlecard/test_aclgraph_accuracy.py)
+- Offline test example: [`tests/e2e/singlecard/test_offline_inference.py`](https://github.com/intellistream/vllm-ascend-hust/blob/main/tests/e2e/singlecard/test_offline_inference.py)
+- Online test examples: [`tests/e2e/singlecard/test_prompt_embedding.py`](https://github.com/intellistream/vllm-ascend-hust/blob/main/tests/e2e/singlecard/test_prompt_embedding.py)
+- Correctness test example: [`tests/e2e/singlecard/test_aclgraph_accuracy.py`](https://github.com/intellistream/vllm-ascend-hust/blob/main/tests/e2e/singlecard/test_aclgraph_accuracy.py)
 
     The CI resource is limited, and you might need to reduce the number of layers of a model. Below is an example of how to generate a reduced layer model:
     1. Fork the original model repo in modelscope. All the files in the repo except for weights are required.
@@ -304,12 +308,12 @@ This summary is generated from the job log by
 
 ### Run doctest
 
-vllm-ascend provides a `vllm-ascend/tests/e2e/run_doctests.sh` command to run all doctests in the doc files.
+`vllm-ascend-hust` provides a `tests/e2e/run_doctests.sh` command to run all doctests in the doc files.
 The doctest is a good way to make sure docs stay current and examples remain executable, which can be run locally as follows:
 
 ```bash
 # Run doctest
-/vllm-workspace/vllm-ascend/tests/e2e/run_doctests.sh
+/vllm-workspace/vllm-ascend-hust/tests/e2e/run_doctests.sh
 ```
 
-This will reproduce the same environment as the CI. See [vllm_ascend_doctest.yaml](https://github.com/vllm-project/vllm-ascend/blob/main/.github/workflows/vllm_ascend_doctest.yaml).
+This will reproduce the same environment as the CI. See [vllm_ascend_doctest.yaml](https://github.com/intellistream/vllm-ascend-hust/blob/main/.github/workflows/vllm_ascend_doctest.yaml).

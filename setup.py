@@ -493,18 +493,18 @@ cmdclass = {
 }
 
 setup(
-    name="vllm_ascend",
+    name="vllm-ascend-hust",
     # Follow:
     # https://packaging.python.org/en/latest/specifications/version-specifiers
     version=VERSION,
-    author="vLLM-Ascend team",
+    author="IntelliStream Team",
     license="Apache 2.0",
-    description="vLLM Ascend backend plugin",
+    description="vLLM Hust Ascend backend plugin",
     long_description=read_readme(),
     long_description_content_type="text/markdown",
-    url="https://github.com/vllm-project/vllm-ascend",
+    url="https://github.com/intellistream/vllm-ascend-hust",
     project_urls={
-        "Homepage": "https://github.com/vllm-project/vllm-ascend",
+        "Homepage": "https://github.com/intellistream/vllm-ascend-hust",
     },
     # TODO: Add 3.12 back when torch-npu support 3.12
     classifiers=[

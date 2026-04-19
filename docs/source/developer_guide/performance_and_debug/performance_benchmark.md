@@ -1,8 +1,8 @@
 # Performance Benchmark
 
-This document details the benchmark methodology for vllm-ascend, aimed at evaluating the performance under a variety of workloads. To maintain alignment with vLLM, we use the [benchmark](https://github.com/vllm-project/vllm/tree/main/benchmarks) script provided by the vllm project.
+This document details the benchmark methodology for `vllm-ascend-hust`, aimed at evaluating performance under a variety of workloads. To maintain alignment with vLLM, we use the [benchmark](https://github.com/vllm-project/vllm/tree/main/benchmarks) scripts provided by the vLLM project.
 
-**Benchmark Coverage**: We measure offline E2E latency and throughput, and fixed-QPS online serving benchmarks. For more details, see [vllm-ascend benchmark scripts](https://github.com/vllm-project/vllm-ascend/tree/main/benchmarks).
+**Benchmark Coverage**: We measure offline E2E latency and throughput, and fixed-QPS online serving benchmarks. For more details, see the [vllm-ascend-hust benchmark scripts](https://github.com/intellistream/vllm-ascend-hust/tree/main/benchmarks).
 
 ## 1. Run docker container
 
@@ -33,7 +33,7 @@ docker run --rm \
 ## 2. Install dependencies
 
 ```bash
-cd /workspace/vllm-ascend
+cd /workspace/vllm-ascend-hust
 pip config set global.index-url https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
 pip install -r benchmarks/requirements-bench.txt
 ```

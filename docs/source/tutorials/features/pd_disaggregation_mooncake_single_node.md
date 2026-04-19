@@ -237,7 +237,7 @@ If you want to run "2P1D", please set ASCEND_RT_VISIBLE_DEVICES and port to diff
 
 ## Example Proxy for Deployment
 
-Run a proxy server on the same node with the prefiller service instance. You can get the proxy program in the repository's examples: [load\_balance\_proxy\_server\_example.py](https://github.com/vllm-project/vllm-ascend/blob/main/examples/disaggregated_prefill_v1/load_balance_proxy_server_example.py)
+Run a proxy server on the same node with the prefiller service instance. You can get the proxy program in the repository's examples: [load\_balance\_proxy\_server\_example.py](https://github.com/intellistream/vllm-ascend-hust/blob/main/examples/disaggregated_prefill_v1/load_balance_proxy_server_example.py)
 
 ```shell
 python load_balance_proxy_server_example.py \

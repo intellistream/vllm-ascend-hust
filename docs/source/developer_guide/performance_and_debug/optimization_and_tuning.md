@@ -46,7 +46,7 @@ echo "deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/ jammy-security 
 apt update && apt install wget gcc g++ libnuma-dev git vim -y
 ```
 
-Install vllm and vllm-ascend:
+Install `vllm` and `vllm-ascend-hust`:
 
 ```{code-block} bash
    :substitutions:
@@ -58,10 +58,10 @@ pip install modelscope pandas datasets gevent sacrebleu rouge_score pybind11 pyt
 VLLM_USE_MODELSCOPE=true
 ```
 
-Please follow the [Installation Guide](https://docs.vllm.ai/projects/ascend/en/latest/installation.html) to make sure vLLM and vllm-ascend are installed correctly.
+Please follow the local [Installation Guide](../../installation.md) and [Fork Release and Install Guide](../../fork_release_install_guide.md) to make sure `vllm` and `vllm-ascend-hust` are installed correctly.
 
 :::{note}
-Make sure your vLLM and vllm-ascend are installed after your Python configuration is completed, because these packages will build binary files using python in current environment. If you install vLLM and vllm-ascend before completing section 1.1, the binary files will not use the optimized python.
+Make sure `vllm` and `vllm-ascend-hust` are installed after your Python configuration is completed, because these packages will build binary files using the Python in the current environment. If you install them before completing section 1.1, the binary files will not use the optimized Python.
 :::
 
 ## Optimizations

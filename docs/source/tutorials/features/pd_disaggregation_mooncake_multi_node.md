@@ -240,12 +240,12 @@ If you occasionally see `zmq.error.ZMQError: Address already in use` during star
 ### launch_online_dp.py
 
 Use `launch_online_dp.py` to launch external dp vllm servers.
-[launch\_online\_dp.py](https://github.com/vllm-project/vllm-ascend/blob/main/examples/external_online_dp/launch_online_dp.py)
+[launch\_online\_dp.py](https://github.com/intellistream/vllm-ascend-hust/blob/main/examples/external_online_dp/launch_online_dp.py)
 
 ### run_dp_template.sh
 
 Modify `run_dp_template.sh` on each node.
-[run\_dp\_template.sh](https://github.com/vllm-project/vllm-ascend/blob/main/examples/external_online_dp/run_dp_template.sh)
+[run\_dp\_template.sh](https://github.com/intellistream/vllm-ascend-hust/blob/main/examples/external_online_dp/run_dp_template.sh)
 
 #### Layerwise
 
@@ -751,9 +751,9 @@ Run a proxy server on the same node where your prefiller service instance is dep
 
 We provide two different proxy implementations with distinct request routing behaviors:
 
-- **`load_balance_proxy_layerwise_server_example.py`**: Requests are first routed to the D nodes, which then forward to the P nodes as needed.This proxy is designed for use with the MooncakeLayerwiseConnector.[load\_balance\_proxy\_layerwise\_server\_example.py](https://github.com/vllm-project/vllm-ascend/blob/main/examples/disaggregated_prefill_v1/load_balance_proxy_layerwise_server_example.py)
+- **`load_balance_proxy_layerwise_server_example.py`**: Requests are first routed to the D nodes, which then forward to the P nodes as needed. This proxy is designed for use with the MooncakeLayerwiseConnector. [load\_balance\_proxy\_layerwise\_server\_example.py](https://github.com/intellistream/vllm-ascend-hust/blob/main/examples/disaggregated_prefill_v1/load_balance_proxy_layerwise_server_example.py)
 
-- **`load_balance_proxy_server_example.py`**: Requests are first routed to the P nodes, which then forward to the D nodes for subsequent processing.This proxy is designed for use with the MooncakeConnector.[load\_balance\_proxy\_server\_example.py](https://github.com/vllm-project/vllm-ascend/blob/main/examples/disaggregated_prefill_v1/load_balance_proxy_server_example.py)
+- **`load_balance_proxy_server_example.py`**: Requests are first routed to the P nodes, which then forward to the D nodes for subsequent processing. This proxy is designed for use with the MooncakeConnector. [load\_balance\_proxy\_server\_example.py](https://github.com/intellistream/vllm-ascend-hust/blob/main/examples/disaggregated_prefill_v1/load_balance_proxy_server_example.py)
 
 :::::{tab-set}
 
@@ -874,7 +874,7 @@ python load_balance_proxy_server_example.py \
 | --decoder-hosts | Hosts of decoder nodes |
 | --decoder-ports | Ports of decoder nodes |
 
-You can get the proxy program in the repository's examples, [load\_balance\_proxy\_server\_example.py](https://github.com/vllm-project/vllm-ascend/blob/main/examples/disaggregated_prefill_v1/load_balance_proxy_server_example.py)
+You can get the proxy program in the repository's examples, [load\_balance\_proxy\_server\_example.py](https://github.com/intellistream/vllm-ascend-hust/blob/main/examples/disaggregated_prefill_v1/load_balance_proxy_server_example.py)
 
 ## Benchmark
 

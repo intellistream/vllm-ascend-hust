@@ -16,14 +16,14 @@ Currently, **ONLY** Atlas A2 series (Ascend-cann-kernels-910b), Atlas A3 series 
 - Atlas A3 Training series (Atlas 800T A3, Atlas 900 A3 SuperPoD, Atlas 9000 A3 SuperPoD)
 - Atlas 800I A3 Inference series (Atlas 800I A3)
 - [Experimental] Atlas 300I Inference series (Atlas 300I Duo).
-- [Experimental] Currently for 310I Duo the stable version is vllm-ascend v0.10.0rc1.
+- [Experimental] Currently for 310I Duo the stable compatible fork release is `vllm-ascend-hust` v0.10.0rc1.
 
 Below series are NOT supported yet:
 
 - Atlas 200I A2 (Ascend-cann-kernels-310b) unplanned yet
 - Ascend 910, Ascend 910 Pro B (Ascend-cann-kernels-910) unplanned yet
 
-From a technical view, vllm-ascend supports devices if torch-npu is supported. Otherwise, we have to implement it by using custom ops. We also welcome you to join us to improve together.
+From a technical point of view, `vllm-ascend-hust` supports devices whenever the required torch-npu stack is available. Otherwise, support has to be added through custom ops or other platform-specific integration work.
 
 ### 2. How to get our docker containers?
 
@@ -67,7 +67,7 @@ docker load -i vllm-ascend-$TAG.tar.gz
 docker images | grep vllm-ascend
 ```
 
-### 3. What models does vllm-ascend supports?
+### 3. What models does vllm-ascend-hust support?
 
 Find more details [<u>here</u>](https://docs.vllm.ai/projects/ascend/en/latest/user_guide/support_matrix/supported_models.html).
 
@@ -75,12 +75,12 @@ Find more details [<u>here</u>](https://docs.vllm.ai/projects/ascend/en/latest/u
 
 There are many channels that you can communicate with our community developers / users:
 
-- Submit a GitHub [<u>issue</u>](https://github.com/vllm-project/vllm-ascend/issues?page=1).
+- Submit a GitHub [<u>issue</u>](https://github.com/intellistream/vllm-ascend-hust/issues).
 - Join our [<u>weekly meeting</u>](https://docs.google.com/document/d/1hCSzRTMZhIB8vRq1_qOOjx4c9uYUxvdQvDsMV2JcSrw/edit?tab=t.0#heading=h.911qu8j8h35z) and share your ideas.
 - Join our [<u>WeChat</u>](https://github.com/vllm-project/vllm-ascend/issues/227) group and ask your questions.
 - Join our ascend channel in [<u>vLLM forums</u>](https://discuss.vllm.ai/c/hardware-support/vllm-ascend-support/6) and publish your topics.
 
-### 5. What features does vllm-ascend V1 supports?
+### 5. What features does vllm-ascend-hust V1 support?
 
 Find more details [<u>here</u>](https://docs.vllm.ai/projects/ascend/en/latest/user_guide/support_matrix/supported_features.html).
 
@@ -102,29 +102,32 @@ import vllm
 
 If all above steps are not working, feel free to submit a GitHub issue.
 
-### 7. How vllm-ascend work with vLLM?
+### 7. How does vllm-ascend-hust work with vLLM?
 
-`vllm-ascend` is a hardware plugin for vLLM. The version of `vllm-ascend` is the same as the version of `vllm`. For example, if you use `vllm` 0.9.1, you should use vllm-ascend 0.9.1 as well. For the main branch, we ensure that `vllm-ascend` and `vllm` are compatible at every commit.
+`vllm-ascend-hust` is the localized Ascend hardware plugin distribution for
+`vllm-hust`. The Python module namespace remains `vllm_ascend`. In general, you
+should pair `vllm-ascend-hust` with the compatible `vllm` or `vllm-hust`
+baseline documented for the release you install.
 
-### 8. Does vllm-ascend support Prefill Disaggregation feature?
+### 8. Does vllm-ascend-hust support Prefill Disaggregation?
 
-Yes, vllm-ascend supports Prefill Disaggregation feature with Mooncake backend. See the [official tutorial](https://docs.vllm.ai/projects/ascend/en/latest/tutorials/pd_disaggregation_mooncake_multi_node.html) for example.
+Yes. `vllm-ascend-hust` supports Prefill Disaggregation with the Mooncake backend. See the [official tutorial](https://docs.vllm.ai/projects/ascend/en/latest/tutorials/pd_disaggregation_mooncake_multi_node.html) for an example.
 
-### 9. Does vllm-ascend support quantization method?
+### 9. Does vllm-ascend-hust support quantization?
 
-Currently, w8a8, w4a8, and w4a4 quantization methods are already supported by vllm-ascend.
+Currently, w8a8, w4a8, and w4a4 quantization methods are already supported by `vllm-ascend-hust`.
 
 ### 10. How to run a W8A8 DeepSeek model?
 
 Follow the [inference tutorial](https://docs.vllm.ai/projects/ascend/en/latest/tutorials/multi_node.html) and replace the model with DeepSeek.
 
-### 11. How is vllm-ascend tested?
+### 11. How is vllm-ascend-hust tested?
 
-vllm-ascend is tested in three aspects: functions, performance, and accuracy.
+`vllm-ascend-hust` is tested in three aspects: functionality, performance, and accuracy.
 
-- **Functional test**: We added CI, including part of vllm's native unit tests and vllm-ascend's own unit tests. In vllm-ascend's tests, we test basic functionalities, popular model availability, and [supported features](https://docs.vllm.ai/projects/ascend/en/latest/user_guide/support_matrix/supported_features.html) through E2E test.
+- **Functional test**: CI includes part of vLLM's native unit tests and this fork's own unit tests. The fork tests basic functionality, popular model availability, and [supported features](https://docs.vllm.ai/projects/ascend/en/latest/user_guide/support_matrix/supported_features.html) through E2E coverage.
 
-- **Performance test**: We provide [benchmark](https://github.com/vllm-project/vllm-ascend/tree/main/benchmarks) tools for E2E performance benchmark, which can be easily re-run locally. We will publish a perf website to show the performance test results for each pull request.
+- **Performance test**: We provide [benchmark](https://github.com/intellistream/vllm-ascend-hust/tree/main/benchmarks) tools for E2E performance benchmarking, which can be re-run locally.
 
 - **Accuracy test**: We are working on adding accuracy test to the CI as well.
 
@@ -132,7 +135,7 @@ vllm-ascend is tested in three aspects: functions, performance, and accuracy.
 
 For each release, we'll publish the performance test and accuracy test report in the future.
 
-### 12. How to fix the error "InvalidVersion" when using vllm-ascend?
+### 12. How to fix the error "InvalidVersion" when using vllm-ascend-hust?
 
 The problem is usually caused by the installation of a development or editable version of the vLLM package. In this case, we provide the environment variable `VLLM_VERSION` to let users specify the version of vLLM package to use. Please set the environment variable `VLLM_VERSION` to the version of the vLLM package you have installed. The format of `VLLM_VERSION` should be `X.Y.Z`.
 
@@ -159,9 +162,12 @@ And if you're using DeepSeek-V3 or DeepSeek-R1, please make sure after the tenso
 [rank0]: EZ9999: [PID: 62938] 2025-05-27-06:52:12.455.807 numHeads / numKvHeads = 8, MLA only support {32, 64, 128}.[FUNC:CheckMlaAttrs][FILE:incre_flash_attention_tiling_check.cc][LINE:1218]
 ```
 
-### 15. Failed to reinstall vllm-ascend from source after uninstalling vllm-ascend
+### 15. Failed to reinstall vllm-ascend-hust from source after uninstalling it
 
-You may encounter the problem of C/C++ compilation failure when reinstalling vllm-ascend from source using pip. If the installation fails, use `python setup.py install` (recommended) to install, or use `python setup.py clean` to clear the cache.
+You may encounter C/C++ compilation failures when reinstalling
+`vllm-ascend-hust` from source using pip. If the installation fails, use
+`python setup.py install` to install, or use `python setup.py clean` to clear
+the cache before reinstalling.
 
 ### 16. How to generate deterministic results when using vllm-ascend?
 
@@ -224,7 +230,9 @@ The current stream requirement calculation for size captures only accounts for m
 
 ### 19. How to install custom version of torch_npu?
 
-torch-npu will be overridden  when installing vllm-ascend. If you need to install a specific version of torch-npu, you can manually install the specified version of torch-npu after vllm-ascend is installed.
+torch-npu will be overridden when installing `vllm-ascend-hust`. If you need to
+install a specific version of torch-npu, you can manually install the specified
+version after `vllm-ascend-hust` is installed.
 
 ### 20. On certain systems (e.g., Kylin OS), `docker pull` may fail with an `invalid tar header` error
 

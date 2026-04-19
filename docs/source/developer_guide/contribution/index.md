@@ -2,16 +2,18 @@
 
 ## Building and Testing
 
-It's recommended to set up a local development environment to build vllm-ascend and run tests
+It's recommended to set up a local development environment to build `vllm-ascend-hust` and run tests
 before you submit a PR.
 
 ### Set up a development environment
 
-Theoretically, the vllm-ascend build is only supported on Linux because
-`vllm-ascend` dependency `torch_npu` only supports Linux.
+Theoretically, the `vllm-ascend-hust` build is only supported on Linux because its `torch_npu` dependency only supports Linux.
 
 But you can still set up a development environment on Linux/Windows/macOS for linting and running basic
 tests.
+
+For package naming, PyPI publishing, and version mapping in this fork, see
+[vLLM Hust Ascend Release and Install Guide](../../fork_release_install_guide.md).
 
 #### Run lint locally
 
@@ -21,9 +23,9 @@ cd ~/vllm-project/
 python3 -m venv .venv
 source ./.venv/bin/activate
 
-# Clone vllm-ascend and install
-git clone https://github.com/vllm-project/vllm-ascend.git
-cd vllm-ascend
+# Clone vllm-ascend-hust and install
+git clone https://github.com/intellistream/vllm-ascend-hust.git
+cd vllm-ascend-hust
 
 # Install lint requirement and enable pre-commit hook
 pip install -r requirements-lint.txt
@@ -49,7 +51,7 @@ VLLM_TARGET_DEVICE="empty" pip install .
 cd ..
 
 # Install requirements
-cd vllm-ascend
+cd vllm-ascend-hust
 # For Linux:
 pip install -r requirements-dev.txt
 # For non Linux:
@@ -88,7 +90,7 @@ Only specific types of PRs will be reviewed. The PR title is prefixed appropriat
 - `[ModelRunner]` for new features or optimization in model runner.
 - `[Platform]` for new features or optimization in platform.
 - `[Worker]` for new features or optimization in worker.
-- `[Core]` for new features or optimization  in the core vllm-ascend logic (such as platform, attention, communicators, model runner)
+- `[Core]` for new features or optimization in the core vllm-ascend-hust logic (such as platform, attention, communicators, model runner)
 - `[Kernel]` for changes affecting compute kernels and ops.
 - `[Bugfix]` for bug fixes.
 - `[Doc]` for documentation fixes and improvements.

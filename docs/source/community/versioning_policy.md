@@ -1,10 +1,10 @@
 # Versioning Policy
 
-Starting with vLLM 0.7.x, the vLLM Ascend Plugin ([vllm-project/vllm-ascend](https://github.com/vllm-project/vllm-ascend)) project follows [PEP 440](https://peps.python.org/pep-0440/) to publish versions matching vLLM ([vllm-project/vllm](https://github.com/vllm-project/vllm)).
+`vllm-ascend-hust` follows [PEP 440](https://peps.python.org/pep-0440/) and keeps its release cadence aligned with upstream vLLM where practical. In this fork, the Git repository and PyPI distribution are named `vllm-ascend-hust`, while the Python module namespace remains `vllm_ascend`. See [Fork Release and Install Guide](../fork_release_install_guide.md) for the naming matrix used by this fork.
 
-## vLLM Ascend Plugin versions
+## Plugin versions
 
-Each vLLM Ascend release is versioned as `v[major].[minor].[micro][rcN][.postN]` (such as
+Each `vllm-ascend-hust` release is versioned as `v[major].[minor].[micro][rcN][.postN]` (such as
 `v0.7.3rc1`, `v0.7.3`, `v0.7.3.post1`)
 
 - **Final releases**: Typically scheduled every three months, with careful alignment to the vLLM upstream release cycle and the Ascend software product roadmap.
@@ -14,12 +14,12 @@ Each vLLM Ascend release is versioned as `v[major].[minor].[micro][rcN][.postN]`
 For example:
 
 - `v0.7.x`: first final release to match the vLLM `v0.7.x` version.
-- `v0.7.3rc1`: first pre version of vLLM Ascend.
+- `v0.7.3rc1`: first pre version of `vllm-ascend-hust`.
 - `v0.7.3.post1`: post release for the `v0.7.3` release if it has some minor errors.
 
 ## Release compatibility matrix
 
-The table below is the release compatibility matrix for vLLM Ascend release.
+The table below is the release compatibility matrix for this fork.
 
 | vLLM Ascend | vLLM              | Python          | Stable CANN |        PyTorch/torch_npu        | Triton Ascend |
 |-------------|-------------------|-----------------|-------------|---------------------------------|---------------|
@@ -55,7 +55,7 @@ The table below is the release compatibility matrix for vLLM Ascend release.
 If you're using v0.7.3, don't forget to install [mindie-turbo](https://pypi.org/project/mindie-turbo) as well.
 :::
 
-For main branch of vLLM Ascend, we usually make it compatible with the latest vLLM release and a newer commit hash of vLLM. Please note that this table is usually updated. Please check it regularly.
+For the `main` branch of `vllm-ascend-hust`, we usually keep compatibility with the latest vLLM release and, when needed, a newer vLLM commit hash. Please note that this table is usually updated. Please check it regularly.
 
 | vLLM Ascend | vLLM         | Python           | Stable CANN | PyTorch/torch_npu  |
 |-------------|--------------|------------------|-------------|--------------------|
@@ -101,7 +101,7 @@ For main branch of vLLM Ascend, we usually make it compatible with the latest vL
 
 ## Branch policy
 
-vLLM Ascend includes two branches: main and dev.
+`vllm-ascend-hust` uses `main` plus release branches.
 
 - **main**: corresponds to the vLLM main branch and latest 1 or 2 release version. It is continuously monitored for quality through Ascend CI.
 - **releases/vX.Y.Z**: development branch, created with part of new releases of vLLM. For example, `releases/v0.13.0` is the dev branch for vLLM `v0.13.0` version.
@@ -120,7 +120,7 @@ The table below lists branch states.
 
 ### Branch states
 
-Note that vLLM Ascend will only be released for a certain vLLM release version, not for every version. Hence, you may notice that some versions have corresponding dev branches (e.g. `releases/v0.13.0`), while others do not (e.g. `releases/v0.12.0`). The vLLM Ascend release branch now follows the `releases/vX.Y.Z` naming convention, replacing the previous `vX.Y.Z-dev` format to align with vLLM's branch naming standards.
+Note that `vllm-ascend-hust` is only released for selected vLLM release versions, not every upstream tag. Hence, you may notice that some versions have corresponding release branches (for example `releases/v0.13.0`), while others do not (for example `releases/v0.12.0`). The release branch naming follows `releases/vX.Y.Z`.
 
 Usually, each minor version of vLLM (such as 0.7) corresponds to a vLLM Ascend version branch and supports its latest version (such as 0.7.3), as shown below:
 
@@ -143,19 +143,19 @@ Usually, each minor version of vLLM (such as 0.7) corresponds to a vLLM Ascend v
 - State: The state of the feature branch is `Maintained` until it is merged into the main branch or deleted.
 - RFC Link: The feature branch should be created with a corresponding RFC issue. The creation of a feature branch requires an RFC and approval from at least two maintainers.
 - Scheduled Merge Time: The final goal of a feature branch is to be merged into the main branch. If it remains unmerged for more than three months, the mentor maintainer should evaluate whether to delete the branch.
-- Mentor: The mentor should be a vLLM Ascend maintainer who is responsible for the feature branch.
+- Mentor: The mentor should be a `vllm-ascend-hust` maintainer who is responsible for the feature branch.
 
 ### Backward compatibility
 
-For main branch, vLLM Ascend should work with vLLM main branch and latest 1 or 2 releases. To ensure backward compatibility, do as follows:
+For the `main` branch, `vllm-ascend-hust` should work with the vLLM `main` branch and the latest 1 or 2 releases. To ensure backward compatibility, do as follows:
 
 - Both main branch and target vLLM release, such as the vLLM main branch and vLLM 0.8.4, are tested by Ascend E2E CI.
-- To make sure that code changes are compatible with the latest 1 or 2 vLLM releases, vLLM Ascend introduces a version check mechanism inside the code. It checks the version of the installed vLLM package first to decide which code logic to use. If users hit the `InvalidVersion` error, it may indicate that they have installed a dev or editable version of vLLM package. In this case, we provide the env variable `VLLM_VERSION` to let users specify the version of vLLM package to use.
+- To make sure that code changes are compatible with the latest 1 or 2 vLLM releases, `vllm-ascend-hust` introduces a version check mechanism inside the code. It checks the version of the installed vLLM package first to decide which code logic to use. If users hit the `InvalidVersion` error, it may indicate that they have installed a dev or editable version of the vLLM package. In this case, we provide the env variable `VLLM_VERSION` to let users specify the version of vLLM to use.
 - Document changes should be compatible with the latest 1 or 2 vLLM releases. Notes should be added if there are any breaking changes.
 
 ## Document branch policy
 
-To reduce maintenance costs, **all branch documentation content should remain consistent, and version differences can be controlled via variables in [docs/source/conf.py](https://github.com/vllm-project/vllm-ascend/blob/main/docs/source/conf.py)**. While this is not a simple task, it is a principle we should strive to follow.
+To reduce maintenance costs, **all branch documentation content should remain consistent, and version differences can be controlled via variables in [docs/source/conf.py](https://github.com/intellistream/vllm-ascend-hust/blob/main/docs/source/conf.py)**. While this is not a simple task, it is a principle we should strive to follow.
 
 | Version | Purpose | Code Branch |
 |-----|-----|---------|
@@ -173,5 +173,5 @@ Notes:
 
 - `torch-npu`: Ascend Extension for PyTorch (torch-npu) releases a stable version to [PyPi](https://pypi.org/project/torch-npu)
   every 3 months, a development version (aka the POC version) every month, and a nightly version every day.
-  The PyPi stable version **CAN** be used in vLLM Ascend final version, the monthly dev version **ONLY CAN** be used in
-  vLLM Ascend RC version for rapid iteration, and the nightly version **CANNOT** be used in vLLM Ascend any version and branch.
+  The PyPi stable version **CAN** be used in `vllm-ascend-hust` final versions, the monthly dev version **ONLY CAN** be used in
+  `vllm-ascend-hust` RC versions for rapid iteration, and the nightly version **CANNOT** be used in `vllm-ascend-hust` on any version or branch.

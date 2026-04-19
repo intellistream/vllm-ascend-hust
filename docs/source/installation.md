@@ -1,6 +1,10 @@
 # Installation
 
-This document describes how to install vllm-ascend manually.
+This document describes how to install the `vllm-ascend-hust` distribution
+manually.
+
+For fork-specific naming, version mapping, and installation channel guidance,
+see [vLLM Hust Ascend Release and Install Guide](fork_release_install_guide.md).
 
 ## Requirements
 
@@ -12,14 +16,14 @@ This document describes how to install vllm-ascend manually.
     | Software      | Supported version                | Note                                      |
     |---------------|----------------------------------|-------------------------------------------|
     | Ascend HDK    | Refer to the documentation [here](https://www.hiascend.com/document/detail/zh/canncommercial/83RC1/releasenote/releasenote_0000.html) | Required for CANN |
-    | CANN          | == 8.5.1                        | Required for vllm-ascend and torch-npu    |
-    | torch-npu     | == 2.9.0             | Required for vllm-ascend, No need to install manually, it will be auto installed in below steps |
+   | CANN          | == 8.5.1                        | Required for vllm-ascend-hust and torch-npu    |
+   | torch-npu     | == 2.9.0             | Required for vllm-ascend-hust, No need to install manually, it will be auto installed in below steps |
     | torch         | == 2.9.0                          | Required for torch-npu and vllm           |
     | NNAL          | == 8.5.1                       | Required for libatb.so, enables advanced tensor operations |
 
 There are two installation methods:
 
-- **Using pip**: first prepare the environment manually or via a CANN image, then install `vllm-ascend` using pip.
+- **Using pip**: first prepare the environment manually or via a CANN image, then install `vllm-ascend-hust` using pip.
 - **Using docker**: use the `vllm-ascend` pre-built docker image directly.
 
 ## Configure Ascend CANN environment
@@ -116,7 +120,7 @@ No extra steps are needed if you are using the `vllm-ascend` prebuilt Docker ima
 ::::
 :::::
 
-Once this is done, you can start to set up `vllm` and `vllm-ascend`.
+Once this is done, you can start to set up `vllm` and `vllm-ascend-hust`.
 
 ## Set up using Python
 
@@ -139,7 +143,7 @@ pip config set global.index-url https://mirrors.tuna.tsinghua.edu.cn/pypi/web/si
 pip config set global.extra-index-url "https://download.pytorch.org/whl/cpu/"
 ```
 
-Then you can install `vllm` and `vllm-ascend` from a **pre-built wheel**:
+Then you can install `vllm` and `vllm-ascend-hust` from a **pre-built wheel**:
 
 ```{code-block} bash
    :substitutions:
@@ -147,8 +151,8 @@ Then you can install `vllm` and `vllm-ascend` from a **pre-built wheel**:
 # Install vllm-project/vllm. The newest supported version is |vllm_version|.
 pip install vllm==|pip_vllm_version|
 
-# Install vllm-project/vllm-ascend from pypi.
-pip install vllm-ascend==|pip_vllm_ascend_version|
+# Install intellistream/vllm-ascend-hust from PyPI.
+pip install vllm-ascend-hust==|pip_vllm_ascend_version|
 ```
 
 :::{dropdown} Click here to see "Build from source code"
@@ -163,9 +167,9 @@ cd vllm
 VLLM_TARGET_DEVICE=empty pip install -v -e .
 cd ..
 
-# Install vLLM Ascend.
-git clone --depth 1 --branch |vllm_ascend_version| https://github.com/vllm-project/vllm-ascend.git
-cd vllm-ascend
+# Install vLLM Hust Ascend.
+git clone --depth 1 --branch |vllm_ascend_version| https://github.com/intellistream/vllm-ascend-hust.git
+cd vllm-ascend-hust
 git submodule update --init --recursive
 pip install -v -e .
 cd ..
@@ -188,7 +192,8 @@ If you are building in a CPU-only environment where `npu-smi` is unavailable, yo
 
 ## Set up using Docker
 
-`vllm-ascend` offers Docker images for deployment. You can just pull the **prebuilt image** from the image repository [ascend/vllm-ascend](https://quay.io/repository/ascend/vllm-ascend?tab=tags) and run it with bash.
+The upstream official `vllm-ascend` project offers Docker images for
+deployment. You can pull the **prebuilt image** from [ascend/vllm-ascend](https://quay.io/repository/ascend/vllm-ascend?tab=tags) and run it directly.
 
 Supported images as following.
 
@@ -205,8 +210,8 @@ Supported images as following.
 or build IMAGE from **source code**:
 
 ```bash
-git clone https://github.com/vllm-project/vllm-ascend.git
-cd vllm-ascend
+git clone https://github.com/intellistream/vllm-ascend-hust.git
+cd vllm-ascend-hust
 docker build -t vllm-ascend-dev-image:latest -f ./Dockerfile .
 ```
 

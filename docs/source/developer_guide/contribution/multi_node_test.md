@@ -8,7 +8,7 @@ The following picture shows the basic deployment view of the multi-node CI mecha
 
 ![alt text](../../assets/deployment.png)
 
-From the workflow perspective, we can see how the final test script is executed, The key point is that these two [lws.yaml and run.sh](https://github.com/vllm-project/vllm-ascend/tree/main/tests/e2e/nightly/multi_node/scripts), The former defines how our k8s cluster is pulled up, and the latter defines the entry script when the pod is started, Each node executes different logic according to the [LWS_WORKER_INDEX](https://lws.sigs.k8s.io/docs/reference/labels-annotations-and-environment-variables/) environment variable, so that multiple nodes can form a distributed cluster to perform tasks.
+From the workflow perspective, we can see how the final test script is executed. The key point is these two files, [lws.yaml and run.sh](https://github.com/intellistream/vllm-ascend-hust/tree/main/tests/e2e/nightly/multi_node/scripts). The former defines how our k8s cluster is pulled up, and the latter defines the entry script when the pod is started. Each node executes different logic according to the [LWS_WORKER_INDEX](https://lws.sigs.k8s.io/docs/reference/labels-annotations-and-environment-variables/) environment variable, so that multiple nodes can form a distributed cluster to perform tasks.
 
 ![alt text](../../assets/workflow.png)
 
@@ -20,7 +20,7 @@ From the workflow perspective, we can see how the final test script is executed,
 
 2. Add config yaml
 
-    As the entrypoint script [run.sh](https://github.com/vllm-project/vllm-ascend/blob/0bf3f21a987aede366ec4629ad0ffec8e32fe90d/tests/e2e/nightly/multi_node/scripts/run.sh#L106) shows, A k8s pod startup means traversing all *.yaml files in the [directory](https://github.com/vllm-project/vllm-ascend/tree/main/tests/e2e/nightly/multi_node/config/), reading and executing according to different configurations, so what we need to do is just add "yamls" like [DeepSeek-V3.yaml](https://github.com/vllm-project/vllm-ascend/blob/main/tests/e2e/nightly/multi_node/config/DeepSeek-V3.yaml).
+    As the entrypoint script [run.sh](https://github.com/intellistream/vllm-ascend-hust/blob/main/tests/e2e/nightly/multi_node/scripts/run.sh) shows, a k8s pod startup means traversing all `*.yaml` files in the [directory](https://github.com/intellistream/vllm-ascend-hust/tree/main/tests/e2e/nightly/multi_node/config), reading and executing according to different configurations, so what we need to do is just add YAMLs like [DeepSeek-V3.yaml](https://github.com/intellistream/vllm-ascend-hust/blob/main/tests/e2e/nightly/multi_node/config/DeepSeek-V3.yaml).
 
     Suppose you have **2 nodes** running a 1P1D setup (1 Prefillers + 1 Decoder):
 
@@ -72,7 +72,7 @@ From the workflow perspective, we can see how the final test script is executed,
 
 3. Add the case to nightly workflow
 
-Currently, the multi-node test workflow is defined in the [nightly_test_a3.yaml](https://github.com/vllm-project/vllm-ascend/blob/main/.github/workflows/nightly_test_a3.yaml)
+Currently, the multi-node test workflow is defined in [nightly_test_a3.yaml](https://github.com/intellistream/vllm-ascend-hust/blob/main/.github/workflows/nightly_test_a3.yaml).
 
    ```yaml
     multi-node-tests:
@@ -152,7 +152,7 @@ This section assumes that you already have a [Kubernetes](https://kubernetes.io/
                 - sh
                 - -c
                 - |
-                    bash /vllm-workspace/vllm-ascend/tests/e2e/nightly/multi_node/scripts/run.sh
+                    bash /vllm-workspace/vllm-ascend-hust/tests/e2e/nightly/multi_node/scripts/run.sh
                 resources:
                 limits:
                     huawei.com/ascend-1980: 16
@@ -205,7 +205,7 @@ This section assumes that you already have a [Kubernetes](https://kubernetes.io/
                 - sh
                 - -c
                 - |
-                    bash /vllm-workspace/vllm-ascend/tests/e2e/nightly/multi_node/scripts/run.sh
+                    bash /vllm-workspace/vllm-ascend-hust/tests/e2e/nightly/multi_node/scripts/run.sh
                 resources:
                 limits:
                     huawei.com/ascend-1980: 16
@@ -286,7 +286,7 @@ This section assumes that you already have a [Kubernetes](https://kubernetes.io/
     ================================================================================================== test session starts ===================================================================================================
     platform linux -- Python 3.11.13, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/python3.11.13/bin/python3
     cachedir: .pytest_cache
-    rootdir: /vllm-workspace/vllm-ascend
+    rootdir: /vllm-workspace/vllm-ascend-hust
     configfile: pyproject.toml
     plugins: cov-7.0.0, asyncio-1.3.0, mock-3.15.1, anyio-4.12.0
     asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
@@ -315,14 +315,14 @@ Since our script is Kubernetes-friendly, we need to actively pass in some cluste
 
 - Step 1. Add cluster_hosts to config yamls
 
-    Modify on every cluster host, commands just like [DeepSeek-V3.yaml](https://github.com/vllm-project/vllm-ascend/blob/e760aae1df7814073a4180172385505c1ec0fd83/tests/e2e/nightly/multi_node/config/DeepSeek-V3.yaml#L25) after the configure item `num_nodes` , for example:
+    Modify on every cluster host, following the pattern in [DeepSeek-V3.yaml](https://github.com/intellistream/vllm-ascend-hust/blob/main/tests/e2e/nightly/multi_node/config/DeepSeek-V3.yaml), after the `num_nodes` item, for example:
     `cluster_hosts: ["xxx.xxx.xxx.188", "xxx.xxx.xxx.212"]`
 
 - Step 2. Install develop environment
-    - Install vllm-ascend develop packages on every cluster host
+        - Install `vllm-ascend-hust` develop packages on every cluster host
 
       ``` bash
-      cd /vllm-workspace/vllm-ascend
+            cd /vllm-workspace/vllm-ascend-hust
       python3 -m pip install -r requirements-dev.txt
       ```
 
@@ -345,6 +345,6 @@ Since our script is Kubernetes-friendly, we need to actively pass in some cluste
     ``` bash
     export WORKSPACE=/vllm-workspace # Change it to your path locally
     export CONFIG_YAML_PATH="DeepSeek-V3.yaml" # Replace with the config case you added
-    cd $WORKSPACE/vllm-ascend
+    cd $WORKSPACE/vllm-ascend-hust
     bash tests/e2e/nightly/multi_node/scripts/run.sh
     ```

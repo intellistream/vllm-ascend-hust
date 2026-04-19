@@ -2,7 +2,7 @@
 
 In an inference service process, it is sometimes necessary to monitor the internal execution flow of the inference service framework to identify performance issues. By collecting start and end timestamps of key processes, identifying key functions or iterations, recording critical events, and gathering various types of information, performance bottlenecks can be quickly located.
 
-This guide will walk you through the process of collecting performance data from the vLLM-Ascend service framework and operators. It covers the complete workflow from preparation, collection, analysis, to visualization, helping you quickly get started with performance collection tools.
+This guide will walk you through the process of collecting performance data from the `vllm-ascend-hust` service framework and operators. It covers the complete workflow from preparation, collection, analysis, to visualization, helping you quickly get started with performance collection tools.
 
 Two performance collection solutions are provided below: Ascend PyTorch Profiler and MS Service Profiler. You can choose the appropriate tool for performance analysis and troubleshooting based on your actual requirements.  
 
@@ -47,7 +47,7 @@ python3 -m vllm.entrypoints.openai.api_server \
 --max-model-len 256
 ```
 
-> Note:**January 19, 2026: The vLLM mainline has deprecated the VLLM_TORCH_PROFILER_DIR environment variable.**[Related PR](https://github.com/vllm-project/vllm-ascend/pull/5928)  When using the vLLM Ascend mainline code to collect profiler data, remember to use the `--profiler-config` (online) parameter or the `profiler_config` (offline) parameter.
+> Note:**January 19, 2026: The vLLM mainline has deprecated the VLLM_TORCH_PROFILER_DIR environment variable.** When using current `vllm-ascend-hust` code to collect profiler data, use the `--profiler-config` (online) parameter or the `profiler_config` (offline) parameter.
 
 ### 2. Start Collection
 

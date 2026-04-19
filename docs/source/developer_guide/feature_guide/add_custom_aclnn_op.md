@@ -1,10 +1,10 @@
 # Adding a custom aclnn operation
 
-This document describes how to add a custom aclnn operation to vllm-ascend.
+This document describes how to add a custom aclnn operation to `vllm-ascend-hust`.
 
-## How custom aclnn operation works in vllm-ascend?
+## How custom aclnn operation works in vllm-ascend-hust?
 
-Custom aclnn operations are built and installed into `vllm_ascend/cann_ops_custom` directory during the build process of vllm-ascend. Then the aclnn operators are bound to `torch.ops._C_ascend` module, enabling users to invoke them in vllm-ascend python code.
+Custom aclnn operations are built and installed into `vllm_ascend/cann_ops_custom` during the build process of `vllm-ascend-hust`. Then the aclnn operators are bound to `torch.ops._C_ascend`, enabling users to invoke them in `vllm-ascend-hust` Python code.
 
 To enable custom operations, use the following code:
 
@@ -22,4 +22,4 @@ enable_custom_op()
 - Bind aclnn operators to torch.ops._C_ascend module in `csrc/torch_binding.cpp`
 - Write a meta implementation in `csrc/torch_binding_meta.cpp` for op being captured into aclgraph
 
-After a successful build of vllm-ascend, the custom aclnn operation can be invoked in python code.
+After a successful build of `vllm-ascend-hust`, the custom aclnn operation can be invoked in Python code.

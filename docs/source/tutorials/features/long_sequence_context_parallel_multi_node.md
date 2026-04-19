@@ -289,10 +289,10 @@ python load_balance_proxy_server_example.py \
 
 3. Run proxy
 
-Run a proxy server on the same node with the prefiller service instance. You can get the proxy program in the repository's examples: [load\_balance\_proxy\_server\_example.py](https://github.com/vllm-project/vllm-ascend/blob/main/examples/disaggregated_prefill_v1/load_balance_proxy_server_example.py)
+Run a proxy server on the same node with the prefiller service instance. You can get the proxy program in the repository's examples: [load\_balance\_proxy\_server\_example.py](https://github.com/intellistream/vllm-ascend-hust/blob/main/examples/disaggregated_prefill_v1/load_balance_proxy_server_example.py)
 
 ```shell
-cd vllm-ascend/examples/disaggregated_prefill_v1/
+cd vllm-ascend-hust/examples/disaggregated_prefill_v1/
 bash proxy.sh
 ```
 

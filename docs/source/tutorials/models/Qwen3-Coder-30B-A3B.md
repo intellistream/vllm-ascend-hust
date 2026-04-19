@@ -52,7 +52,7 @@ docker run --rm \
 
 In addition, if you don't want to use the docker image as above, you can also build all from source:
 
-- Install `vllm-ascend` from source, refer to [installation](../../installation.md).
+- Install `vllm-ascend-hust` from source, refer to [installation](../../installation.md).
 
 ## Deployment
 

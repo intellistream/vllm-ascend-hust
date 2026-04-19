@@ -361,7 +361,7 @@ python load_balance_proxy_server_example.py \
 | --decoder-ports | Ports of decoder nodes |
 | --decoder-ports-inc | Number of increments for decoder node ports |
 
-You can get the proxy program in the repository's examples, [load\_balance\_proxy\_server\_example.py](https://github.com/vllm-project/vllm-ascend/blob/v0.9.1-dev/examples/disaggregate_prefill_v1/load_balance_proxy_server_example.py)
+You can get the proxy program in the repository's examples, [load\_balance\_proxy\_server\_example.py](https://github.com/intellistream/vllm-ascend-hust/blob/main/examples/disaggregated_prefill_v1/load_balance_proxy_server_example.py)
 
 ## Benchmark
 

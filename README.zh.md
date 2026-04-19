@@ -35,7 +35,11 @@ vLLM Ascend Plugin
 
 ## 总览
 
-vLLM 昇腾插件 (`vllm-ascend`) 是一个由社区维护的让vLLM在Ascend NPU无缝运行的后端插件。
+vLLM Hust 昇腾插件 (`vllm-ascend-hust`) 是面向 `vllm-hust` 的本地化
+Ascend 后端分发包。
+
+为兼容上游插件接口和现有运行时代码，Python 的 import/module 命名空间
+仍保持为 `vllm_ascend`。
 
 此插件是 vLLM 社区中支持昇腾后端的推荐方式。它遵循[[RFC]: Hardware pluggable](https://github.com/vllm-project/vllm/issues/11162)所述原则：通过解耦的方式提供了vLLM对Ascend NPU的支持。
 
@@ -49,7 +53,7 @@ vLLM 昇腾插件 (`vllm-ascend`) 是一个由社区维护的让vLLM在Ascend NP
     - Python >= 3.10, < 3.12
     - CANN == 8.5.0 (Ascend HDK 版本参考[这里](https://www.hiascend.com/document/detail/zh/canncommercial/83RC2/releasenote/releasenote_0000.html))
     - PyTorch == 2.9.0, torch-npu == 2.9.0
-    - vLLM (与vllm-ascend版本一致)
+    - vLLM / vLLM Hust（与 vllm-ascend-hust 兼容版本保持一致）
 
 ## 开始使用
 
@@ -60,21 +64,39 @@ vLLM 昇腾插件 (`vllm-ascend`) 是一个由社区维护的让vLLM在Ascend NP
 |v0.17.0rc1| 最新RC版本 |请查看[快速开始](https://docs.vllm.ai/projects/ascend/en/latest/quick_start.html)和[安装指南](https://docs.vllm.ai/projects/ascend/en/latest/installation.html)了解更多|
 |v0.13.0| 最新正式/稳定版本 |[快速开始](https://docs.vllm.ai/projects/ascend/en/v0.13.0/quick_start.html) and [安装指南](https://docs.vllm.ai/projects/ascend/en/v0.13.0/installation.html)了解更多|
 
+## 本地工作区辅助脚本
+
+这个 fork 的打包分发名是 `vllm-ascend-hust`，但 Python 模块名仍然是
+`vllm_ascend`。
+
+在本地 `vllm-hust` 多仓工作区中，常用的 Ascend 辅助脚本放在本仓库的
+`scripts/` 目录下。
+
+常见示例：
+
+```bash
+# 把当前仓库以 editable 方式安装到当前 Python 环境
+bash scripts/install_local_ascend_plugin.sh
+
+# 在当前 shell 中切换到单一 Ascend 运行时
+source scripts/use_single_ascend_env.sh /usr/local/Ascend/ascend-toolkit/latest
+```
+
 ## 贡献
 
-请参考 [CONTRIBUTING]((https://docs.vllm.ai/projects/ascend/en/latest/developer_guide/contribution/index.html)) 文档了解更多关于开发环境搭建、功能测试以及 PR 提交规范的信息。
+请参考 [CONTRIBUTING](CONTRIBUTING.md) 了解本 fork 的开发环境搭建、功能测试和 PR 提交规范。
 
 我们欢迎并重视任何形式的贡献与合作：
 
-- 请通过[Issue](https://github.com/vllm-project/vllm-ascend/issues)来告知我们您遇到的任何Bug。
+- 请通过[Issue](https://github.com/intellistream/vllm-ascend-hust/issues)来告知我们您遇到的任何Bug。
 - 请通过[用户论坛](https://discuss.vllm.ai/c/hardware-support/vllm-ascend-support)来交流使用问题和寻求帮助。
 
 ## 分支策略
 
-vllm-ascend有主干分支和开发分支。
+vllm-ascend-hust 保持 `main` 主分支，并可按需要维护与上游兼容版本对应的发布分支。
 
-- **main**: 主干分支，与vLLM的主干分支对应，并通过昇腾CI持续进行质量看护。
-- **releases/vX.Y.Z**: 开发分支，随vLLM部分新版本发布而创建，比如`releases/v0.13.0`是vllm-asend针对vLLM `v0.13.0` 版本的开发分支。
+- **main**: 本地化 fork 的主开发分支。
+- **releases/vX.Y.Z**: 在需要与特定上游版本线保持兼容时使用的可选发布分支。
 
 下面是维护中的分支：
 
