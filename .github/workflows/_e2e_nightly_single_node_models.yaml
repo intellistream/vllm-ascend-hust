@@ -62,6 +62,8 @@ jobs:
     name: ${{inputs.model_list}} accuracy test
     runs-on: ${{ inputs.runner }}
     if: ${{ inputs.is_run }}
+    env:
+      HOME: ${{ runner.temp }}
     container:
       image: "${{ inputs.image }}"
       env:
@@ -85,7 +87,7 @@ jobs:
           apt-get update -y
           apt install git -y
           git config --global --add safe.directory /__w/vllm-ascend/vllm-ascend
-          git config --global url."https://gh-proxy.test.osinfra.cn/https://github.com/".insteadOf https://github.com/
+          git config --global --unset-all url."https://gh-proxy.test.osinfra.cn/https://github.com/".insteadOf || true
 
       - name: Checkout vllm-project/vllm-ascend repo
         uses: actions/checkout@v6

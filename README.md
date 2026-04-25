@@ -98,6 +98,37 @@ bash scripts/bootstrap_ascend.sh Qwen/Qwen2.5-1.5B-Instruct
 bash scripts/doctor_ascend_env.sh
 ```
 
+## CI Benchmark Leaderboard
+
+This repository now mirrors the trusted Ascend benchmark publication flow used
+in `vllm-hust`.
+
+- Workflow: `.github/workflows/ascend-benchmark-leaderboard.yml`
+- Trigger: same-repo pull requests, pushes to `main`, and manual dispatch
+- Benchmark source of truth: sibling `vllm-hust-benchmark` repository
+- Publish target: Hugging Face dataset snapshots that feed the leaderboard
+
+The workflow checks out a compatible `vllm-hust` baseline, installs the current
+`vllm-ascend-hust` plugin checkout on top of it, runs a trusted Ascend serve
+benchmark, exports a leaderboard submission artifact, and optionally syncs that
+submission plus refreshed leaderboard snapshots to Hugging Face.
+
+Repository variables and secrets follow the `VLLM_ASCEND_HUST_*` prefix, for
+example:
+
+- `VLLM_ASCEND_HUST_VLLM_HUST_REF`
+- `VLLM_ASCEND_HUST_MAIN_BENCHMARK_SCENARIO`
+- `VLLM_ASCEND_HUST_PR_BENCHMARK_SCENARIO`
+- `VLLM_ASCEND_HUST_PUBLISH_BENCHMARK_ON_MAIN`
+- `VLLM_ASCEND_HUST_PUBLISH_BENCHMARK_ON_PR`
+- `VLLM_ASCEND_HUST_BENCHMARK_HF_REPO`
+- `VLLM_ASCEND_HUST_LEADERBOARD_URL`
+- `HF_TOKEN` secret for trusted HF dataset writes
+
+As in `vllm-hust`, `random-online` runs default to artifact preview only. HF
+publication for preview traffic remains gated by
+`VLLM_ASCEND_HUST_ALLOW_RANDOM_HF_PUBLISH=1`.
+
 ## Contributing
 
 See [CONTRIBUTING](CONTRIBUTING.md) for the fork-specific development,

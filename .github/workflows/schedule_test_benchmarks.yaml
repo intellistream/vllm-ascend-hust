@@ -92,7 +92,7 @@ jobs:
       - name: Config git
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git config --global url."https://gh-proxy.test.osinfra.cn/https://github.com/".insteadOf https://github.com/
+          git config --global --unset-all url."https://gh-proxy.test.osinfra.cn/https://github.com/".insteadOf || true
 
       - name: Checkout vllm-project/vllm-ascend repo
         uses: actions/checkout@v6

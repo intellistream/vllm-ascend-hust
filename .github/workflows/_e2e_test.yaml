@@ -31,6 +31,8 @@ jobs:
     name: singlecard-light
     if: ${{ inputs.type == 'light' }}
     runs-on: linux-aarch64-a2b3-1
+    env:
+      HOME: ${{ runner.temp }}
     strategy:
       fail-fast: false
       matrix:
@@ -136,6 +138,8 @@ jobs:
     name: singlecard-full
     if: ${{ inputs.type == 'full' }}
     runs-on: linux-aarch64-a2b3-1
+    env:
+      HOME: ${{ runner.temp }}
     strategy:
       fail-fast: false
       matrix:
@@ -241,6 +245,8 @@ jobs:
     name: multicard-2-light
     if: ${{ inputs.type == 'light' }}
     runs-on: linux-aarch64-a3-2
+    env:
+      HOME: ${{ runner.temp }}
     strategy:
       fail-fast: false
       matrix:
@@ -345,6 +351,8 @@ jobs:
     name: multicard-2-full
     if: ${{ inputs.type == 'full' }}
     runs-on: linux-aarch64-a3-2
+    env:
+      HOME: ${{ runner.temp }}
     strategy:
       fail-fast: false
       matrix:
@@ -469,6 +477,8 @@ jobs:
     name: multicard-4-full
     if: ${{ inputs.type == 'full' }}
     runs-on: linux-aarch64-a3-4
+    env:
+      HOME: ${{ runner.temp }}
     strategy:
       fail-fast: false
       matrix:
@@ -573,6 +583,8 @@ jobs:
     name: 310p singlecard
     runs-on: linux-aarch64-310p-1
     if: ${{ inputs.contains_310 }}
+    env:
+      HOME: ${{ runner.temp }}
     container:
       image: swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/cann:8.5.1-310p-ubuntu22.04-py3.11
       env:
@@ -649,6 +661,8 @@ jobs:
     name: 310p multicards 4cards
     runs-on: linux-aarch64-310p-4
     if: ${{ inputs.contains_310 }}
+    env:
+      HOME: ${{ runner.temp }}
     container:
       image: swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/cann:8.5.1-310p-ubuntu22.04-py3.11
       env:
