@@ -72,6 +72,8 @@ jobs:
     # This is the runner with no NPU for k8s controller
     runs-on: ${{ inputs.runner }}
     if: ${{ inputs.should_run }}
+    env:
+      HOME: ${{ runner.temp }}
     container:
       image: swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/vllm-ascend:nightly-cpu
       env:

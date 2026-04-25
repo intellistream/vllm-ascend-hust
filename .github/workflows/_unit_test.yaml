@@ -20,6 +20,8 @@ jobs:
   unit-test:
     name: unit test
     runs-on: ${{ inputs.runner }}
+    env:
+      HOME: ${{ runner.temp }}
     container:
       image: ${{ inputs.image }}
       env:

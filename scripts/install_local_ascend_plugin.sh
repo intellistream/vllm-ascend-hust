@@ -13,11 +13,57 @@ ASCEND_REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PLUGIN_REPO="${1:-${ASCEND_REPO_ROOT}}"
 CURRENT_USER_NAME="$(id -un 2>/dev/null || printf '%s' "${USER:-}")"
 CURRENT_USER_HOME="$(getent passwd "$CURRENT_USER_NAME" 2>/dev/null | cut -d: -f6 || true)"
+
+resolve_writable_dir() {
+  local candidate
+  for candidate in "$@"; do
+    if [[ -z "$candidate" ]]; then
+      continue
+    fi
+    if [[ -d "$candidate" ]]; then
+      if [[ -w "$candidate" ]]; then
+        printf '%s\n' "$candidate"
+        return 0
+      fi
+      continue
+    fi
+    if mkdir -p "$candidate" 2>/dev/null; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+CURRENT_USER_HOME="$({
+  resolve_writable_dir \
+    "${HOME:-}" \
+    "$CURRENT_USER_HOME" \
+    "${RUNNER_TEMP:-/tmp}/${CURRENT_USER_NAME:-runner}-home"
+} || true)"
+
 if [[ -z "$CURRENT_USER_HOME" ]]; then
-  CURRENT_USER_HOME="${HOME:-}"
+  echo "[ERROR] Could not resolve a writable HOME directory for editable install"
+  exit 1
 fi
-CURRENT_USER_CACHE_HOME="${XDG_CACHE_HOME:-$CURRENT_USER_HOME/.cache}"
-CURRENT_USER_CONFIG_HOME="${XDG_CONFIG_HOME:-$CURRENT_USER_HOME/.config}"
+
+CURRENT_USER_CACHE_HOME="$({
+  resolve_writable_dir \
+    "${XDG_CACHE_HOME:-}" \
+    "$CURRENT_USER_HOME/.cache" \
+    "${RUNNER_TEMP:-/tmp}/${CURRENT_USER_NAME:-runner}-cache"
+} || true)"
+CURRENT_USER_CONFIG_HOME="$({
+  resolve_writable_dir \
+    "${XDG_CONFIG_HOME:-}" \
+    "$CURRENT_USER_HOME/.config" \
+    "${RUNNER_TEMP:-/tmp}/${CURRENT_USER_NAME:-runner}-config"
+} || true)"
+
+if [[ -z "$CURRENT_USER_CACHE_HOME" || -z "$CURRENT_USER_CONFIG_HOME" ]]; then
+  echo "[ERROR] Could not resolve writable cache/config directories for editable install"
+  exit 1
+fi
 
 if [[ ! -f "${PLUGIN_REPO}/pyproject.toml" ]]; then
   echo "[ERROR] vllm-ascend-hust repo not found: ${PLUGIN_REPO}"
