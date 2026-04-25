@@ -21,7 +21,7 @@ jobs:
     name: unit test
     runs-on: ${{ inputs.runner }}
     env:
-      HOME: ${{ runner.temp }}
+      HOME: ${{ github.workspace }}
     container:
       image: ${{ inputs.image }}
       env:

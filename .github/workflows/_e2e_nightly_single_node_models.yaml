@@ -63,7 +63,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     if: ${{ inputs.is_run }}
     env:
-      HOME: ${{ runner.temp }}
+      HOME: ${{ github.workspace }}
     container:
       image: "${{ inputs.image }}"
       env:
