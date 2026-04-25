@@ -73,7 +73,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     if: ${{ inputs.should_run }}
     env:
-      HOME: ${{ runner.temp }}
+      HOME: ${{ github.workspace }}
     container:
       image: swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/vllm-ascend:nightly-cpu
       env:
