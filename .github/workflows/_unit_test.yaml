@@ -30,7 +30,7 @@ jobs:
         SOC_VERSION: ascend910b1
         MAX_JOBS: 4
         COMPILE_CUSTOM_KERNELS: 0
-        UV_INDEX_URL: http://cache-service.nginx-pypi-cache.svc.cluster.local/pypi/simple
+        UV_INDEX_URL: https://mirrors.huaweicloud.com/repository/pypi/simple
         UV_EXTRA_INDEX_URL: https://mirrors.huaweicloud.com/ascend/repos/pypi
         UV_INDEX_STRATEGY: unsafe-best-match
         UV_NO_CACHE: 1
@@ -39,9 +39,9 @@ jobs:
     steps:
       - name: Install packages
         run: |
-          sed -Ei 's@(ports|archive).ubuntu.com@cache-service.nginx-pypi-cache.svc.cluster.local:8081@g' /etc/apt/sources.list
-          pip config set global.index-url http://cache-service.nginx-pypi-cache.svc.cluster.local/pypi/simple
-          pip config set global.trusted-host cache-service.nginx-pypi-cache.svc.cluster.local
+          sed -Ei 's@(ports|archive).ubuntu.com@mirrors.huaweicloud.com@g' /etc/apt/sources.list
+          pip config set global.index-url https://mirrors.huaweicloud.com/repository/pypi/simple
+          pip config set global.trusted-host mirrors.huaweicloud.com
           apt-get update -y
           apt-get install -y python3-pip git vim wget net-tools gcc g++ cmake libnuma-dev curl gnupg2
           git config --global --add safe.directory /__w/vllm-ascend/vllm-ascend
@@ -66,7 +66,8 @@ jobs:
       - name: Install vllm-project/vllm-ascend
         run: |
           pip install uc-manager
-          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/Ascend/ascend-toolkit/latest/x86_64-linux/devlib
+          ascend_arch=$(uname -m)
+          export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/Ascend/ascend-toolkit/latest/${ascend_arch}-linux/devlib"
           uv pip install -v . --extra-index-url https://download.pytorch.org/whl/cpu/
           uv pip install -r requirements-dev.txt --extra-index-url https://download.pytorch.org/whl/cpu/
 
@@ -76,7 +77,8 @@ jobs:
           TORCH_DEVICE_BACKEND_AUTOLOAD: 0
         shell: bash
         run: |
-          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/Ascend/ascend-toolkit/latest/x86_64-linux/devlib
+          ascend_arch=$(uname -m)
+          export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/Ascend/ascend-toolkit/latest/${ascend_arch}-linux/devlib"
           set -o pipefail
           pytest -sv --cov --cov-report=xml:unittests-coverage.xml tests/ut \
             --ignore tests/ut/model_loader/netloader/test_netloader_elastic.py \
@@ -88,7 +90,7 @@ jobs:
             --ignore tests/ut/spec_decode/test_mtp_proposer.py \
             --ignore tests/ut/kv_connector/test_mooncake_layerwise_connector.py \
             2>&1 | tee /tmp/unit-test.log
-          exit ${PIPESTATUS[0]}
+          exit "${PIPESTATUS[0]}"
 
       - name: Summarize unit test failure
         if: ${{ always() }}
