@@ -94,8 +94,8 @@ jobs:
     uses: ./.github/workflows/_unit_test.yaml
     with:
       vllm: ${{ matrix.vllm_version }}
-      runner: linux-amd64-cpu-8-hk
-      image: quay.nju.edu.cn/ascend/cann:8.5.1-910b-ubuntu22.04-py3.11
+      runner: ubuntu-latest
+      image: quay.io/ascend/cann:8.5.1-910b-ubuntu22.04-py3.11
       type: pr
 
   e2e-light:
