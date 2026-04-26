@@ -129,6 +129,23 @@ As in `vllm-hust`, `random-online` runs default to artifact preview only. HF
 publication for preview traffic remains gated by
 `VLLM_ASCEND_HUST_ALLOW_RANDOM_HF_PUBLISH=1`.
 
+## CI Maintenance Scope
+
+This fork keeps CI focused on fork-local validation and benchmark publication.
+
+- Upstream repository-maintenance bots such as Dependabot version-bump PRs,
+  automatic PR body rewriting, automatic issue labeling, merge-conflict
+  labeling, stale-issue cleanup, label-triggered upstream helper jobs, and
+  scheduled auto-generated maintenance PRs are intentionally not part of the
+  default fork workflow.
+- Scheduled upstream patrol workflows such as upstream-main compatibility
+  sweeps, routine codecov refresh jobs, and upstream-style periodic performance
+  reporting are also not part of the default fork workflow unless this fork
+  explicitly decides to operate them.
+- If similar automation is needed later, it should be reintroduced explicitly
+  against the fork's own maintenance policy instead of inherited unchanged from
+  the upstream `vllm-ascend` repository.
+
 ## Contributing
 
 See [CONTRIBUTING](CONTRIBUTING.md) for the fork-specific development,

@@ -65,7 +65,7 @@ body:
   attributes:
     description: >
       Make sure the doc is updated.
-    label: Doc Test
+    label: Documentation Updates
     value: >
       - [ ] Tutorial is updated.
 
