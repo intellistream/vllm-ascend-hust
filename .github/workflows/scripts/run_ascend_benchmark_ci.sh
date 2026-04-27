@@ -158,12 +158,8 @@ vllm bench serve \
   --result-filename "$(basename "$RAW_RESULT_FILE")"
 
 ENGINE_VERSION=$(python - <<'PY'
-try:
-    from vllm_ascend._version import __version__
-    print(__version__)
-except Exception:
-    import importlib.metadata
-    print(importlib.metadata.version("vllm-ascend-hust"))
+import vllm
+print(vllm.__version__)
 PY
 )
 
@@ -172,7 +168,7 @@ python -m vllm_hust_benchmark.cli submit \
   --benchmark-result-file "$RAW_RESULT_FILE" \
   --constraints-file "$EFFECTIVE_CONSTRAINTS_FILE" \
   --run-id "$RUN_ID" \
-  --engine vllm-ascend-hust \
+  --engine vllm-hust \
   --engine-version "$ENGINE_VERSION" \
   --model-name "$MODEL_NAME" \
   --model-parameters "$MODEL_PARAMETERS" \
@@ -199,7 +195,7 @@ if [[ "$PUBLISH_TO_HF" == "1" ]]; then
     --aggregate-output-dir "$AGGREGATE_OUTPUT_DIR" \
     --repo-id "$HF_REPO_ID" \
     --submissions-prefix submissions-auto \
-    --commit-message "chore: sync vllm-ascend-hust benchmark $RUN_ID (${GITHUB_REF_NAME:-detached}@$(printf '%s' "${GITHUB_SHA:-local}" | cut -c1-8))" \
+    --commit-message "chore: sync vllm-hust benchmark from vllm-ascend-hust $RUN_ID (${GITHUB_REF_NAME:-detached}@$(printf '%s' "${GITHUB_SHA:-local}" | cut -c1-8))" \
     --execute
 else
   python -m vllm_hust_benchmark.cli publish-website \
