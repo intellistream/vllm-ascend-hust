@@ -5,8 +5,13 @@ WORKSPACE_ROOT=${WORKSPACE_ROOT:-${GITHUB_WORKSPACE:-$PWD}}
 VLLM_HUST_REPO=${VLLM_HUST_REPO:-$WORKSPACE_ROOT/vllm-hust}
 VLLM_ASCEND_HUST_REPO=${VLLM_ASCEND_HUST_REPO:-$WORKSPACE_ROOT}
 VLLM_HUST_BENCHMARK_REPO=${VLLM_HUST_BENCHMARK_REPO:-$WORKSPACE_ROOT/vllm-hust-benchmark}
+ASCEND_HUST_TARGET_REPOSITORY=${ASCEND_HUST_TARGET_REPOSITORY:-${GITHUB_REPOSITORY:-unknown}}
+ASCEND_HUST_TARGET_REF=${ASCEND_HUST_TARGET_REF:-${GITHUB_REF_NAME:-detached}}
+ASCEND_HUST_TARGET_SHA=${ASCEND_HUST_TARGET_SHA:-${GITHUB_SHA:-local}}
+ASCEND_HUST_TARGET_COMMIT_URL=${ASCEND_HUST_TARGET_COMMIT_URL:-${GITHUB_SERVER_URL:-https://github.com}/${ASCEND_HUST_TARGET_REPOSITORY}/commit/${ASCEND_HUST_TARGET_SHA}}
+ASCEND_HUST_TARGET_SHA_SHORT=$(printf '%s' "$ASCEND_HUST_TARGET_SHA" | cut -c1-8)
 
-RUN_ID=${RUN_ID:-ci-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-1}-$(printf '%s' "${GITHUB_SHA:-local}" | cut -c1-8)}
+RUN_ID=${RUN_ID:-ci-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-1}-${ASCEND_HUST_TARGET_SHA_SHORT}}
 RESULT_ROOT=${RESULT_ROOT:-$VLLM_ASCEND_HUST_REPO/.benchmarks/ci/$RUN_ID}
 RAW_RESULT_FILE=${RAW_RESULT_FILE:-$RESULT_ROOT/raw_benchmark.json}
 SUBMISSIONS_ROOT=${SUBMISSIONS_ROOT:-$RESULT_ROOT/submissions}
@@ -59,6 +64,9 @@ echo "workspace root: $WORKSPACE_ROOT"
 echo "vllm-hust repo: $VLLM_HUST_REPO"
 echo "vllm-ascend-hust repo: $VLLM_ASCEND_HUST_REPO"
 echo "benchmark repo: $VLLM_HUST_BENCHMARK_REPO"
+echo "benchmark target repository: $ASCEND_HUST_TARGET_REPOSITORY"
+echo "benchmark target ref: $ASCEND_HUST_TARGET_REF"
+echo "benchmark target sha: $ASCEND_HUST_TARGET_SHA"
 echo "run id: $RUN_ID"
 echo "result root: $RESULT_ROOT"
 echo "benchmark scenario: $BENCH_SCENARIO"
@@ -182,6 +190,11 @@ python -m vllm_hust_benchmark.cli submit \
   --input-length "$EFFECTIVE_INPUT_LEN" \
   --output-length "$EFFECTIVE_OUTPUT_LEN" \
   --concurrent-requests "$BENCH_MAX_CONCURRENCY" \
+  --git-commit "$ASCEND_HUST_TARGET_SHA" \
+  --github-commit-url "$ASCEND_HUST_TARGET_COMMIT_URL" \
+  --github-repository "$ASCEND_HUST_TARGET_REPOSITORY" \
+  --github-ref "$ASCEND_HUST_TARGET_REF" \
+  --github-event-name "${GITHUB_EVENT_NAME:-manual}" \
   --submissions-dir "$SUBMISSIONS_ROOT"
 
 if [[ "$PUBLISH_TO_HF" == "1" ]]; then
@@ -195,7 +208,7 @@ if [[ "$PUBLISH_TO_HF" == "1" ]]; then
     --aggregate-output-dir "$AGGREGATE_OUTPUT_DIR" \
     --repo-id "$HF_REPO_ID" \
     --submissions-prefix submissions-auto \
-    --commit-message "chore: sync vllm-hust benchmark from vllm-ascend-hust $RUN_ID (${GITHUB_REF_NAME:-detached}@$(printf '%s' "${GITHUB_SHA:-local}" | cut -c1-8))" \
+    --commit-message "chore: sync vllm-hust benchmark from vllm-ascend-hust $RUN_ID (${ASCEND_HUST_TARGET_REPOSITORY}@${ASCEND_HUST_TARGET_REF}:${ASCEND_HUST_TARGET_SHA_SHORT})" \
     --execute
 else
   python -m vllm_hust_benchmark.cli publish-website \

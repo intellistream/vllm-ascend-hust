@@ -129,6 +129,20 @@ As in `vllm-hust`, `random-online` runs default to artifact preview only. HF
 publication for preview traffic remains gated by
 `VLLM_ASCEND_HUST_ALLOW_RANDOM_HF_PUBLISH=1`.
 
+Fork pull requests intentionally do not run the trusted self-hosted benchmark
+job automatically. They receive the security-note job only, because the real
+benchmark path uses a self-hosted Ascend runner plus trusted dataset-publish
+credentials.
+
+Maintainers can still benchmark a fork commit explicitly through
+`workflow_dispatch` by setting:
+
+- `ascend_hust_target`: fork target in `owner/repo@ref` form
+
+That manual path checks out the requested fork ref on the trusted runner,
+runs the benchmark, and records the actual benchmark target repository/ref/SHA
+in the generated submission metadata and benchmark summary.
+
 ## CI Maintenance Scope
 
 This fork keeps CI focused on fork-local validation and benchmark publication.

@@ -6,6 +6,11 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      ascend_hust_target:
+        description: Benchmark target in owner/repo@ref form for manual fork testing
+        required: false
+        type: string
+        default: vLLM-HUST/vllm-ascend-hust@main
       benchmark_scenario:
         description: Benchmark scenario to run
         required: false
@@ -54,16 +59,6 @@ on:
         required: false
         type: string
         default: "4"
-      input_length:
-        description: Optional logical input length recorded in exported metadata
-        required: false
-        type: string
-        default: ""
-      output_length:
-        description: Optional logical output length recorded in exported metadata
-        required: false
-        type: string
-        default: ""
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -97,6 +92,7 @@ jobs:
       TRANSFORMERS_CACHE: ${{ github.workspace }}/../.hf-cache/transformers
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
       HF_REPO_ID: ${{ vars.VLLM_ASCEND_HUST_BENCHMARK_HF_REPO || 'intellistream/vllm-ascend-hust-benchmark-results' }}
+      ASCEND_HUST_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.ascend_hust_target || format('{0}@{1}', github.repository, github.ref_name) }}
       VLLM_HUST_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.vllm_hust_ref || vars.VLLM_ASCEND_HUST_VLLM_HUST_REF || 'main' }}
       MODEL_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.model_name || 'Qwen/Qwen2.5-0.5B-Instruct' }}
       BENCH_SCENARIO: ${{ github.event_name == 'workflow_dispatch' && inputs.benchmark_scenario || (github.event_name == 'pull_request' && vars.VLLM_ASCEND_HUST_PR_BENCHMARK_SCENARIO) || (github.event_name == 'push' && vars.VLLM_ASCEND_HUST_MAIN_BENCHMARK_SCENARIO) || 'random-online' }}
@@ -112,8 +108,8 @@ jobs:
       BENCH_RANDOM_OUTPUT_LEN: "16"
       BENCH_REQUEST_RATE: ${{ github.event_name == 'workflow_dispatch' && inputs.request_rate || 'inf' }}
       BENCH_MAX_CONCURRENCY: ${{ github.event_name == 'workflow_dispatch' && inputs.max_concurrency || '4' }}
-      BENCH_INPUT_LEN: ${{ github.event_name == 'workflow_dispatch' && inputs.input_length || '' }}
-      BENCH_OUTPUT_LEN: ${{ github.event_name == 'workflow_dispatch' && inputs.output_length || '' }}
+      BENCH_INPUT_LEN: ''
+      BENCH_OUTPUT_LEN: ''
       HARDWARE_VENDOR: Huawei
       HARDWARE_CHIP_MODEL: 910B3
       CHIP_COUNT: "1"
@@ -123,7 +119,41 @@ jobs:
       PUBLISH_TO_HF: ${{ (((github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.VLLM_ASCEND_HUST_PUBLISH_BENCHMARK_ON_MAIN == '1') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && vars.VLLM_ASCEND_HUST_PUBLISH_BENCHMARK_ON_PR == '1') || (github.event_name == 'workflow_dispatch' && inputs.publish_to_hf)) && secrets.HF_TOKEN != '') && '1' || '0' }}
 
     steps:
-      - uses: actions/checkout@v6.0.1
+      - name: Resolve benchmark target
+        shell: bash
+        run: |
+          target="${ASCEND_HUST_TARGET}"
+          repo="${target%@*}"
+          ref="${target#*@}"
+
+          if [[ "$repo" == "$target" || -z "$repo" || -z "$ref" ]]; then
+            echo "workflow_dispatch target must use owner/repo@ref format, got: $target" >&2
+            exit 2
+          fi
+
+          {
+            echo "ASCEND_HUST_REPOSITORY=$repo"
+            echo "ASCEND_HUST_REF=$ref"
+          } >> "$GITHUB_ENV"
+
+      - name: Checkout workflow ref
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        uses: actions/checkout@v6.0.1
+
+      - name: Checkout manual benchmark target
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/checkout@v6.0.1
+        with:
+          repository: ${{ env.ASCEND_HUST_REPOSITORY }}
+          ref: ${{ env.ASCEND_HUST_REF }}
+
+      - name: Capture benchmark target metadata
+        run: |
+          {
+            echo "ASCEND_HUST_TARGET_REPOSITORY=${ASCEND_HUST_REPOSITORY}"
+            echo "ASCEND_HUST_TARGET_REF=${ASCEND_HUST_REF}"
+            echo "ASCEND_HUST_TARGET_SHA=$(git rev-parse HEAD)"
+          } >> "$GITHUB_ENV"
 
       - name: Checkout vllm-hust repo
         uses: actions/checkout@v6.0.1
@@ -198,6 +228,10 @@ jobs:
           hf_repo = os.environ.get('HF_REPO_ID', 'unknown')
           leaderboard_url = os.environ.get('WEBSITE_LEADERBOARD_URL', '').strip()
           vllm_hust_ref = os.environ.get('VLLM_HUST_REF', 'main')
+          ascend_hust_repository = os.environ.get('ASCEND_HUST_TARGET_REPOSITORY', os.environ.get('GITHUB_REPOSITORY', 'unknown'))
+          ascend_hust_ref = os.environ.get('ASCEND_HUST_TARGET_REF', os.environ.get('GITHUB_REF_NAME', 'unknown'))
+          ascend_hust_sha = os.environ.get('ASCEND_HUST_TARGET_SHA', os.environ.get('GITHUB_SHA', 'unknown'))
+          ascend_hust_commit_url = f"{os.environ['GITHUB_SERVER_URL']}/{ascend_hust_repository}/commit/{ascend_hust_sha}"
 
           lines = [
             '## Ascend Benchmark Summary',
@@ -205,6 +239,9 @@ jobs:
             f'- Scenario: `{bench_scenario}`',
             f'- Model: `{model_name}`',
             f'- Base vllm-hust ref: `{vllm_hust_ref}`',
+            f'- Benchmark target repo: `{ascend_hust_repository}`',
+            f'- Benchmark target ref: `{ascend_hust_ref}`',
+            f'- Benchmark target commit: [`{ascend_hust_sha[:8]}`]({ascend_hust_commit_url})',
             f'- Publish mode: `{publish_mode}`',
             f'- Workflow run: [view run]({run_url})',
           ]
@@ -214,6 +251,9 @@ jobs:
             f'- Scenario: `{bench_scenario}`',
             f'- Model: `{model_name}`',
             f'- Base vllm-hust ref: `{vllm_hust_ref}`',
+            f'- Benchmark target repo: `{ascend_hust_repository}`',
+            f'- Benchmark target ref: `{ascend_hust_ref}`',
+            f'- Benchmark target commit: [`{ascend_hust_sha[:8]}`]({ascend_hust_commit_url})',
             f'- Publish mode: `{publish_mode}`',
             f'- Workflow run: [view run]({run_url})',
           ]
