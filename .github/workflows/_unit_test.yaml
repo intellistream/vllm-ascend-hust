@@ -44,7 +44,8 @@ jobs:
           pip config set global.trusted-host mirrors.huaweicloud.com
           apt-get update -y
           apt-get install -y python3-pip git vim wget net-tools gcc g++ cmake libnuma-dev curl gnupg2
-          git config --global --add safe.directory /__w/vllm-ascend/vllm-ascend
+          git config --global --add safe.directory /__w/vllm-ascend-hust/vllm-ascend-hust
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           pip install uv
 
       - name: Checkout vllm-project/vllm repo
