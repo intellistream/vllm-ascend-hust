@@ -134,25 +134,46 @@ jobs:
           {
             echo "ASCEND_HUST_REPOSITORY=$repo"
             echo "ASCEND_HUST_REF=$ref"
+            if [[ "$repo" == "$GITHUB_REPOSITORY" ]]; then
+              echo "ASCEND_HUST_LOCAL_CHECKOUT=1"
+            else
+              echo "ASCEND_HUST_LOCAL_CHECKOUT=0"
+            fi
           } >> "$GITHUB_ENV"
 
       - name: Checkout workflow ref
         if: ${{ github.event_name != 'workflow_dispatch' }}
         uses: actions/checkout@v6.0.1
 
+      - name: Checkout manual benchmark repo history
+        if: ${{ github.event_name == 'workflow_dispatch' && env.ASCEND_HUST_LOCAL_CHECKOUT == '1' }}
+        uses: actions/checkout@v6.0.1
+        with:
+          fetch-depth: 0
+
       - name: Checkout manual benchmark target
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && env.ASCEND_HUST_LOCAL_CHECKOUT != '1' }}
         uses: actions/checkout@v6.0.1
         with:
           repository: ${{ env.ASCEND_HUST_REPOSITORY }}
           ref: ${{ env.ASCEND_HUST_REF }}
 
+      - name: Activate local manual benchmark target
+        if: ${{ github.event_name == 'workflow_dispatch' && env.ASCEND_HUST_LOCAL_CHECKOUT == '1' }}
+        shell: bash
+        run: |
+          git checkout --force "${ASCEND_HUST_REF}"
+
       - name: Capture benchmark target metadata
         run: |
+          target_sha="$(git rev-parse HEAD)"
+          target_sha_short="$(printf '%s' "$target_sha" | cut -c1-8)"
           {
             echo "ASCEND_HUST_TARGET_REPOSITORY=${ASCEND_HUST_REPOSITORY}"
             echo "ASCEND_HUST_TARGET_REF=${ASCEND_HUST_REF}"
-            echo "ASCEND_HUST_TARGET_SHA=$(git rev-parse HEAD)"
+            echo "ASCEND_HUST_TARGET_SHA=$target_sha"
+            echo "ASCEND_HUST_TARGET_SHA_SHORT=$target_sha_short"
+            echo "RUN_ID=ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${target_sha_short}"
           } >> "$GITHUB_ENV"
 
       - name: Checkout vllm-hust repo
@@ -202,7 +223,6 @@ jobs:
           VLLM_HUST_REPO: ${{ github.workspace }}/vllm-hust
           VLLM_ASCEND_HUST_REPO: ${{ github.workspace }}
           VLLM_HUST_BENCHMARK_REPO: ${{ github.workspace }}/vllm-hust-benchmark
-          RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
         run: |
           source scripts/use_single_ascend_env.sh
           bash .github/workflows/scripts/run_ascend_benchmark_ci.sh
@@ -215,7 +235,10 @@ jobs:
           import os
           from pathlib import Path
 
-          run_id = f"ci-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}-{os.environ['GITHUB_SHA']}"
+          run_id = os.environ.get('RUN_ID')
+          if not run_id:
+            target_sha = os.environ.get('ASCEND_HUST_TARGET_SHA', os.environ['GITHUB_SHA'])
+            run_id = f"ci-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}-{target_sha[:8]}"
           result_root = Path(os.environ['GITHUB_WORKSPACE']) / '.benchmarks' / 'ci' / run_id
           raw_result = result_root / 'raw_benchmark.json'
           leaderboard_entry = result_root / 'submissions' / run_id / 'run_leaderboard.json'
@@ -299,6 +322,7 @@ jobs:
               lines.append(site_note)
               comment_lines.append(site_note)
 
+          comment_path.parent.mkdir(parents=True, exist_ok=True)
           summary_path.write_text("\n".join(lines) + "\n", encoding='utf-8')
           comment_path.write_text("\n".join(comment_lines) + "\n", encoding='utf-8')
           PY
@@ -320,7 +344,7 @@ jobs:
             const fs = require('fs');
             const path = require('path');
 
-            const runId = `ci-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}-${process.env.GITHUB_SHA}`;
+            const runId = process.env.RUN_ID || `ci-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}-${(process.env.ASCEND_HUST_TARGET_SHA || process.env.GITHUB_SHA).slice(0, 8)}`;
             const commentPath = path.join(process.env.GITHUB_WORKSPACE, '.benchmarks', 'ci', runId, 'benchmark_comment.md');
             const marker = '<!-- ascend-benchmark-leaderboard-comment -->';
 
