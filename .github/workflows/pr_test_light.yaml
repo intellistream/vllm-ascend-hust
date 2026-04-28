@@ -44,6 +44,8 @@ jobs:
       vllm: ed359c497a728f08b5b41456c07a688ccd510fbc
   changes:
     runs-on: linux-aarch64-a2b3-0
+    env:
+      CHECKOUT_USE_SSH_443: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY != '' && '1' || '0' }}
     outputs:
       e2e_tracker: ${{ steps.filter.outputs.e2e_tracker }}
       ut_tracker: ${{ steps.filter.outputs.ut_tracker }}
@@ -53,8 +55,29 @@ jobs:
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global --unset-all url."https://gh-proxy.test.osinfra.cn/https://github.com/".insteadOf || true
+      - name: Configure GitHub SSH over 443
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          cat > "$HOME/.ssh/config" <<'EOF'
+          Host github.com
+            HostName ssh.github.com
+            Port 443
+            User git
+            HostKeyAlias github.com
+            IdentitiesOnly yes
+          EOF
+          chmod 600 "$HOME/.ssh/config"
       # NOTE: Do not update the version of checkout, there have some issue on self_hosted runner with the higher version
       - uses: actions/checkout@v6
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        with:
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: false
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        if: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
       - uses: dorny/paths-filter@v3
         id: filter
         with:
