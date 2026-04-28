@@ -86,7 +86,8 @@ jobs:
           pip config set global.index-url https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
           apt-get update -y
           apt install git -y
-          git config --global --add safe.directory /__w/vllm-ascend/vllm-ascend
+          git config --global --add safe.directory /__w/vllm-ascend-hust/vllm-ascend-hust
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global --unset-all url."https://gh-proxy.test.osinfra.cn/https://github.com/".insteadOf || true
 
       - name: Checkout vllm-project/vllm-ascend repo
