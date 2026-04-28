@@ -358,6 +358,8 @@ class TestAscendAttentionBackendImpl(TestBase):
             output,
         )
 
+        assert self.impl.key_cache is not None
+        assert self.impl.value_cache is not None
         self.assertEqual(self.impl.key_cache.data_ptr(), packed_kv_cache[0].data_ptr())
         self.assertEqual(self.impl.value_cache.data_ptr(), packed_kv_cache[1].data_ptr())
         mock_npu_reshape_and_cache.assert_called_once()
