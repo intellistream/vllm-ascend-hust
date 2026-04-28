@@ -123,7 +123,16 @@ example:
 - `VLLM_ASCEND_HUST_PUBLISH_BENCHMARK_ON_PR`
 - `VLLM_ASCEND_HUST_BENCHMARK_HF_REPO`
 - `VLLM_ASCEND_HUST_LEADERBOARD_URL`
+- `VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY` secret to force benchmark checkouts over
+  `ssh.github.com:443`
 - `HF_TOKEN` secret for trusted HF dataset writes
+
+If `VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY` is configured, the benchmark workflow
+rewrites GitHub SSH traffic to `ssh.github.com:443` before any checkout step.
+That lets the trusted self-hosted runner avoid the default `github.com:443`
+HTTPS clone path when the machine room allows SSH-over-443 more reliably than
+HTTPS. If the secret is unset, the workflow falls back to the default GitHub
+token + HTTPS checkout behavior.
 
 As in `vllm-hust`, `random-online` runs default to artifact preview only. HF
 publication for preview traffic remains gated by
