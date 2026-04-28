@@ -59,6 +59,101 @@ trap cleanup EXIT
 
 mkdir -p "$RESULT_ROOT" "$SUBMISSIONS_ROOT" "$AGGREGATE_OUTPUT_DIR"
 
+select_idle_ascend_device() {
+  python - <<'PY'
+import re
+import subprocess
+import sys
+
+
+def parse_logical_map(mapping_output: str) -> dict[tuple[str, str], int]:
+  logical_map = {}
+  for line in mapping_output.splitlines():
+    parts = line.split()
+    if len(parts) < 3:
+      continue
+    npu_id, chip_id, logical_id = parts[:3]
+    if npu_id.isdigit() and chip_id.isdigit() and logical_id.isdigit():
+      logical_map[(npu_id, chip_id)] = int(logical_id)
+  return logical_map
+
+
+def select_best_idle_device(mapping_output: str, info_output: str) -> int | None:
+  logical_map = parse_logical_map(mapping_output)
+  hbm_usage_pattern = re.compile(r"(\d+)\s*/\s*(\d+)\s*$")
+  device_stats = []
+  current_npu_id = None
+  current_health = None
+
+  for raw_line in info_output.splitlines():
+    line = raw_line.strip()
+    if not line.startswith("|"):
+      continue
+
+    parts = [part.strip() for part in line.strip("|").split("|")]
+    if len(parts) < 3:
+      continue
+
+    left_column = parts[0].split()
+    if len(left_column) >= 2 and left_column[0].isdigit() and parts[1] and ":" not in parts[1]:
+      current_npu_id = left_column[0]
+      current_health = parts[1]
+      continue
+
+    if current_npu_id is None or current_health != "OK":
+      continue
+
+    if len(left_column) != 1 or not left_column[0].isdigit() or ":" not in parts[1]:
+      continue
+
+    chip_id = left_column[0]
+    logical_id = logical_map.get((current_npu_id, chip_id))
+    if logical_id is None:
+      continue
+
+    hbm_match = hbm_usage_pattern.search(parts[2])
+    if hbm_match is None:
+      continue
+
+    used_memory_mb = int(hbm_match.group(1))
+    total_memory_mb = int(hbm_match.group(2))
+    free_memory_mb = max(0, total_memory_mb - used_memory_mb)
+    device_stats.append((logical_id, free_memory_mb, total_memory_mb))
+
+  if not device_stats:
+    return None
+
+  device_stats.sort(key=lambda item: (-item[1], item[0]))
+  return device_stats[0][0]
+
+
+try:
+  mapping_result = subprocess.run(
+    ["npu-smi", "info", "-m"],
+    check=False,
+    capture_output=True,
+    text=True,
+    timeout=5,
+  )
+  info_result = subprocess.run(
+    ["npu-smi", "info"],
+    check=False,
+    capture_output=True,
+    text=True,
+    timeout=5,
+  )
+except Exception:
+  sys.exit(0)
+
+if mapping_result.returncode != 0 or info_result.returncode != 0:
+  sys.exit(0)
+
+selected_device = select_best_idle_device(mapping_result.stdout, info_result.stdout)
+if selected_device is not None:
+  print(selected_device)
+PY
+}
+
 echo "== Ascend benchmark CI =="
 echo "workspace root: $WORKSPACE_ROOT"
 echo "vllm-hust repo: $VLLM_HUST_REPO"
@@ -125,6 +220,15 @@ fi
 if [[ ! -f "$EFFECTIVE_CONSTRAINTS_FILE" ]]; then
   echo "constraints file not found: $EFFECTIVE_CONSTRAINTS_FILE" >&2
   exit 2
+fi
+
+if [[ "$CHIP_COUNT" == "1" && -z "${ASCEND_RT_VISIBLE_DEVICES:-}" ]]; then
+  SELECTED_ASCEND_DEVICE="$(select_idle_ascend_device)"
+  if [[ -n "$SELECTED_ASCEND_DEVICE" ]]; then
+    export ASCEND_RT_VISIBLE_DEVICES="$SELECTED_ASCEND_DEVICE"
+    export VLLM_ASCEND_TORCH_PREFLIGHT_DEVICE="npu:0"
+    echo "selected single-card Ascend device: $ASCEND_RT_VISIBLE_DEVICES"
+  fi
 fi
 
 vllm serve "$MODEL_NAME" \
