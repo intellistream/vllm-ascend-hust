@@ -16,6 +16,8 @@ on:
         required: true
         type: string
     secrets:
+      CODECOV_TOKEN:
+        required: false
       VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY:
         required: false
 
