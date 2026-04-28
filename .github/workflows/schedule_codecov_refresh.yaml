@@ -40,3 +40,5 @@ jobs:
       runner: ubuntu-latest
       image: quay.io/ascend/cann:8.2.rc2-910b-ubuntu22.04-py3.11
       type: schedule
+    secrets:
+      VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}

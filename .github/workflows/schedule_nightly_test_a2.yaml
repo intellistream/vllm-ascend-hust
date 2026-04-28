@@ -108,6 +108,8 @@ jobs:
             contains(needs.parse-trigger.outputs.filter, format(',{0},', matrix.test_config.name))
           )
         }}
+    secrets:
+      VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
 
   multi-node-tests:
     name: multi-node
@@ -145,6 +147,7 @@ jobs:
         }}
     secrets:
       KUBECONFIG_B64: ${{ secrets.KUBECONFIG_HK_001_INTERNAL_B64 }}
+      VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
 
   single-node-accuracy-tests:
     needs: [parse-trigger]
@@ -195,6 +198,8 @@ jobs:
           )
         }}
       upload: false
+    secrets:
+      VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
 
   doc-test:
     name: doc-test
@@ -208,6 +213,7 @@ jobs:
     runs-on: linux-aarch64-a2b3-1
     env:
       HOME: ${{ github.workspace }}
+      CHECKOUT_USE_SSH_443: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY != '' && '1' || '0' }}
     container:
       image: swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/vllm-ascend:${{ matrix.vllm_version }}
     steps:
@@ -224,8 +230,32 @@ jobs:
           cd /vllm-workspace/vllm
           git --no-pager log -1 || true
 
+      - name: Configure GitHub SSH over 443
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' '${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}' > "$HOME/.ssh/github_actions"
+          chmod 600 "$HOME/.ssh/github_actions"
+          cat > "$HOME/.ssh/config" <<'EOF'
+          Host github.com
+            HostName ssh.github.com
+            Port 443
+            User git
+            HostKeyAlias github.com
+            IdentityFile ~/.ssh/github_actions
+            IdentitiesOnly yes
+            StrictHostKeyChecking no
+          EOF
+          chmod 600 "$HOME/.ssh/config"
+          git config --global url."ssh://git@ssh.github.com:443/".insteadOf https://github.com/
+
       - name: Checkout vllm-project/vllm-ascend repo
         uses: actions/checkout@v6
+        with:
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
 
       - name: Run vllm-ascend/tests/e2e/run_doctests.sh
         run: |

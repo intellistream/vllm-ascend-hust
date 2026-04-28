@@ -19,12 +19,16 @@ on:
         required: false
         type: boolean
         default: false
+    secrets:
+      VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY:
+        required: false
 env:
   UV_INDEX_URL: http://cache-service.nginx-pypi-cache.svc.cluster.local/pypi/simple
   UV_EXTRA_INDEX_URL: https://mirrors.huaweicloud.com/ascend/repos/pypi
   UV_INDEX_STRATEGY: unsafe-best-match
   UV_NO_CACHE: 1
   UV_SYSTEM_PYTHON: 1
+  CHECKOUT_USE_SSH_443: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY != '' && '1' || '0' }}
 
 jobs:
   e2e-light:
@@ -44,8 +48,31 @@ jobs:
         VLLM_USE_MODELSCOPE: True
         HF_HUB_OFFLINE: 1
     steps:
+      - name: Configure GitHub SSH over 443
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' '${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}' > "$HOME/.ssh/github_actions"
+          chmod 600 "$HOME/.ssh/github_actions"
+          cat > "$HOME/.ssh/config" <<'EOF'
+          Host github.com
+            HostName ssh.github.com
+            Port 443
+            User git
+            HostKeyAlias github.com
+            IdentityFile ~/.ssh/github_actions
+            IdentitiesOnly yes
+            StrictHostKeyChecking no
+          EOF
+          chmod 600 "$HOME/.ssh/config"
+          git config --global url."ssh://git@ssh.github.com:443/".insteadOf https://github.com/
       - name: Checkout vllm-project/vllm-ascend repo
         uses: actions/checkout@v6
+        with:
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
       - name: Check npu and CANN info
         run: |
           npu-smi info
@@ -77,6 +104,9 @@ jobs:
           ref: ${{ inputs.vllm }}
           path: ./vllm-empty
           fetch-depth: 1
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
 
       - name: Install vllm-project/vllm from source
         working-directory: ./vllm-empty
@@ -153,8 +183,31 @@ jobs:
         HF_HUB_OFFLINE: 1
         MODELSCOPE_HUB_FILE_LOCK: False
     steps:
+      - name: Configure GitHub SSH over 443
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' '${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}' > "$HOME/.ssh/github_actions"
+          chmod 600 "$HOME/.ssh/github_actions"
+          cat > "$HOME/.ssh/config" <<'EOF'
+          Host github.com
+            HostName ssh.github.com
+            Port 443
+            User git
+            HostKeyAlias github.com
+            IdentityFile ~/.ssh/github_actions
+            IdentitiesOnly yes
+            StrictHostKeyChecking no
+          EOF
+          chmod 600 "$HOME/.ssh/config"
+          git config --global url."ssh://git@ssh.github.com:443/".insteadOf https://github.com/
       - name: Checkout vllm-project/vllm-ascend repo
         uses: actions/checkout@v6
+        with:
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
 
       - name: Check npu and CANN info
         run: |
@@ -187,6 +240,9 @@ jobs:
           ref: ${{ inputs.vllm }}
           path: ./vllm-empty
           fetch-depth: 1
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
 
       - name: Install vllm-project/vllm from source
         working-directory: ./vllm-empty
@@ -261,8 +317,31 @@ jobs:
         HCCL_BUFFSIZE: 1024
         HF_HUB_OFFLINE: 1
     steps:
+      - name: Configure GitHub SSH over 443
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' '${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}' > "$HOME/.ssh/github_actions"
+          chmod 600 "$HOME/.ssh/github_actions"
+          cat > "$HOME/.ssh/config" <<'EOF'
+          Host github.com
+            HostName ssh.github.com
+            Port 443
+            User git
+            HostKeyAlias github.com
+            IdentityFile ~/.ssh/github_actions
+            IdentitiesOnly yes
+            StrictHostKeyChecking no
+          EOF
+          chmod 600 "$HOME/.ssh/config"
+          git config --global url."ssh://git@ssh.github.com:443/".insteadOf https://github.com/
       - name: Checkout vllm-project/vllm-ascend repo
         uses: actions/checkout@v6
+        with:
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
       - name: Check npu and CANN info
         run: |
           npu-smi info
@@ -294,6 +373,9 @@ jobs:
           ref: ${{ inputs.vllm }}
           path: ./vllm-empty
           fetch-depth: 1
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
 
       - name: Install vllm-project/vllm from source
         working-directory: ./vllm-empty
@@ -368,8 +450,31 @@ jobs:
         HCCL_BUFFSIZE: 1024
         HF_HUB_OFFLINE: 1
     steps:
+      - name: Configure GitHub SSH over 443
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' '${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}' > "$HOME/.ssh/github_actions"
+          chmod 600 "$HOME/.ssh/github_actions"
+          cat > "$HOME/.ssh/config" <<'EOF'
+          Host github.com
+            HostName ssh.github.com
+            Port 443
+            User git
+            HostKeyAlias github.com
+            IdentityFile ~/.ssh/github_actions
+            IdentitiesOnly yes
+            StrictHostKeyChecking no
+          EOF
+          chmod 600 "$HOME/.ssh/config"
+          git config --global url."ssh://git@ssh.github.com:443/".insteadOf https://github.com/
       - name: Checkout vllm-project/vllm-ascend repo
         uses: actions/checkout@v6
+        with:
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
       - name: Check npu and CANN info
         run: |
           npu-smi info
@@ -401,6 +506,9 @@ jobs:
           ref: ${{ inputs.vllm }}
           path: ./vllm-empty
           fetch-depth: 1
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
 
       - name: Install vllm-project/vllm from source
         working-directory: ./vllm-empty
@@ -494,8 +602,31 @@ jobs:
         VLLM_USE_MODELSCOPE: True
         HF_HUB_OFFLINE: 1
     steps:
+      - name: Configure GitHub SSH over 443
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' '${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}' > "$HOME/.ssh/github_actions"
+          chmod 600 "$HOME/.ssh/github_actions"
+          cat > "$HOME/.ssh/config" <<'EOF'
+          Host github.com
+            HostName ssh.github.com
+            Port 443
+            User git
+            HostKeyAlias github.com
+            IdentityFile ~/.ssh/github_actions
+            IdentitiesOnly yes
+            StrictHostKeyChecking no
+          EOF
+          chmod 600 "$HOME/.ssh/config"
+          git config --global url."ssh://git@ssh.github.com:443/".insteadOf https://github.com/
       - name: Checkout vllm-project/vllm-ascend repo
         uses: actions/checkout@v6
+        with:
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
       - name: Check npu and CANN info
         run: |
           npu-smi info
@@ -527,6 +658,9 @@ jobs:
           ref: ${{ inputs.vllm }}
           path: ./vllm-empty
           fetch-depth: 1
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
 
       - name: Install vllm-project/vllm from source
         working-directory: ./vllm-empty
@@ -597,6 +731,25 @@ jobs:
         VLLM_USE_MODELSCOPE: True
         HF_HUB_OFFLINE: 1
     steps:
+      - name: Configure GitHub SSH over 443
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' '${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}' > "$HOME/.ssh/github_actions"
+          chmod 600 "$HOME/.ssh/github_actions"
+          cat > "$HOME/.ssh/config" <<'EOF'
+          Host github.com
+            HostName ssh.github.com
+            Port 443
+            User git
+            HostKeyAlias github.com
+            IdentityFile ~/.ssh/github_actions
+            IdentitiesOnly yes
+            StrictHostKeyChecking no
+          EOF
+          chmod 600 "$HOME/.ssh/config"
+          git config --global url."ssh://git@ssh.github.com:443/".insteadOf https://github.com/
       - name: Check npu and CANN info
         run: |
           npu-smi info
@@ -613,6 +766,10 @@ jobs:
 
       - name: Checkout vllm-project/vllm-ascend repo
         uses: actions/checkout@v6
+        with:
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
 
       - name: Install system dependencies
         run: |
@@ -627,6 +784,9 @@ jobs:
           ref: ${{ inputs.vllm }}
           path: ./vllm-empty
           fetch-depth: 1
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
 
       - name: Install vllm-project/vllm from source
         working-directory: ./vllm-empty
@@ -676,6 +836,25 @@ jobs:
         VLLM_USE_MODELSCOPE: True
         HF_HUB_OFFLINE: 1
     steps:
+      - name: Configure GitHub SSH over 443
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' '${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}' > "$HOME/.ssh/github_actions"
+          chmod 600 "$HOME/.ssh/github_actions"
+          cat > "$HOME/.ssh/config" <<'EOF'
+          Host github.com
+            HostName ssh.github.com
+            Port 443
+            User git
+            HostKeyAlias github.com
+            IdentityFile ~/.ssh/github_actions
+            IdentitiesOnly yes
+            StrictHostKeyChecking no
+          EOF
+          chmod 600 "$HOME/.ssh/config"
+          git config --global url."ssh://git@ssh.github.com:443/".insteadOf https://github.com/
       - name: Check npu and CANN info
         run: |
           npu-smi info
@@ -692,6 +871,10 @@ jobs:
 
       - name: Checkout vllm-project/vllm-ascend repo
         uses: actions/checkout@v6
+        with:
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
 
       - name: Install system dependencies
         run: |
@@ -706,6 +889,9 @@ jobs:
           ref: ${{ inputs.vllm }}
           path: ./vllm-empty
           fetch-depth: 1
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
 
       - name: Install vllm-project/vllm from source
         working-directory: ./vllm-empty
