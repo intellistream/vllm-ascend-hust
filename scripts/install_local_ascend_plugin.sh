@@ -16,6 +16,7 @@ CURRENT_USER_HOME="$(getent passwd "$CURRENT_USER_NAME" 2>/dev/null | cut -d: -f
 
 resolve_writable_dir() {
   local candidate
+  local parent_dir
   for candidate in "$@"; do
     if [[ -z "$candidate" ]]; then
       continue
@@ -25,6 +26,13 @@ resolve_writable_dir() {
         printf '%s\n' "$candidate"
         return 0
       fi
+      continue
+    fi
+    parent_dir="$(dirname "$candidate")"
+    if [[ "$candidate" = /* && ! -d "$parent_dir" && ! -w "$(dirname "$parent_dir")" ]]; then
+      continue
+    fi
+    if [[ "$candidate" = /* && -d "$parent_dir" && ! -w "$parent_dir" ]]; then
       continue
     fi
     if mkdir -p "$candidate" 2>/dev/null; then

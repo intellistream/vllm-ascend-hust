@@ -143,6 +143,13 @@ job automatically. They receive the security-note job only, because the real
 benchmark path uses a self-hosted Ascend runner plus trusted dataset-publish
 credentials.
 
+Leaderboard display semantics are intentionally repo-scoped and stable:
+
+- displayed `engine`: `vllm-ascend-hust`
+- displayed `engine_version`: benchmark target short Git SHA
+- artifact `versions.core`: paired `vllm-hust` runtime version
+- artifact `versions.backend`: installed `vllm-ascend-hust` package version
+
 Maintainers can still benchmark a fork commit explicitly through
 `workflow_dispatch` by setting:
 

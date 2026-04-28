@@ -223,6 +223,15 @@ jobs:
           ssh-strict: ${{ env.BENCHMARK_CHECKOUT_USE_SSH_443 != '1' }}
           persist-credentials: false
 
+      - name: Checkout website repo
+        uses: actions/checkout@v6.0.1
+        with:
+          repository: vLLM-HUST/vllm-hust-website
+          path: vllm-hust-website
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.BENCHMARK_CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
+
       - name: Prepare Hugging Face cache directories
         run: |
           mkdir -p "$HF_HOME" "$HUGGINGFACE_HUB_CACHE" "$TRANSFORMERS_CACHE"
@@ -233,7 +242,11 @@ jobs:
         env:
           VLLM_HUST_REPO: ${{ github.workspace }}/vllm-hust
           VLLM_HUST_BENCHMARK_REPO: ${{ github.workspace }}/vllm-hust-benchmark
+          HOME: ${{ github.workspace }}/.ci-home
+          XDG_CACHE_HOME: ${{ github.workspace }}/.ci-home/.cache
+          XDG_CONFIG_HOME: ${{ github.workspace }}/.ci-home/.config
         run: |
+          mkdir -p "$HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME"
           source scripts/use_single_ascend_env.sh
           python -m pip install -e "$VLLM_HUST_REPO" --no-build-isolation --no-deps
           bash scripts/install_local_ascend_plugin.sh "$GITHUB_WORKSPACE"
@@ -257,6 +270,7 @@ jobs:
           VLLM_HUST_REPO: ${{ github.workspace }}/vllm-hust
           VLLM_ASCEND_HUST_REPO: ${{ github.workspace }}
           VLLM_HUST_BENCHMARK_REPO: ${{ github.workspace }}/vllm-hust-benchmark
+          VLLM_HUST_WEBSITE_REPO: ${{ github.workspace }}/vllm-hust-website
         run: |
           source scripts/use_single_ascend_env.sh
           bash .github/workflows/scripts/run_ascend_benchmark_ci.sh

@@ -27,7 +27,7 @@ MODEL_NAME=${MODEL_NAME:-Qwen/Qwen2.5-0.5B-Instruct}
 MODEL_PARAMETERS=${MODEL_PARAMETERS:-0.5B}
 MODEL_PRECISION=${MODEL_PRECISION:-BF16}
 HOST=${HOST:-127.0.0.1}
-PORT=${PORT:-8000}
+PORT=${PORT:-}
 DTYPE=${DTYPE:-bfloat16}
 MAX_MODEL_LEN=${MAX_MODEL_LEN:-256}
 MAX_NUM_SEQS=${MAX_NUM_SEQS:-1}
@@ -47,15 +47,65 @@ PUBLISH_TO_HF=${PUBLISH_TO_HF:-0}
 HF_REPO_ID=${HF_REPO_ID:-}
 
 server_pid=""
+server_group_pid=""
 
 cleanup() {
-  if [[ -n "$server_pid" ]] && kill -0 "$server_pid" 2>/dev/null; then
-    kill "$server_pid" || true
+  if [[ -n "$server_group_pid" ]] && kill -0 "$server_group_pid" 2>/dev/null; then
+    kill -TERM -- "-$server_group_pid" 2>/dev/null || true
+    for _ in $(seq 1 10); do
+      if ! kill -0 "$server_group_pid" 2>/dev/null; then
+        break
+      fi
+      sleep 1
+    done
+    kill -KILL -- "-$server_group_pid" 2>/dev/null || true
+  elif [[ -n "$server_pid" ]] && kill -0 "$server_pid" 2>/dev/null; then
+    kill "$server_pid" 2>/dev/null || true
+  fi
+
+  if [[ -n "$server_pid" ]]; then
     wait "$server_pid" || true
   fi
 }
 
+start_server() {
+  if command -v setsid >/dev/null 2>&1; then
+    setsid vllm serve "$MODEL_NAME" \
+      --host "$HOST" \
+      --port "$PORT" \
+      --dtype "$DTYPE" \
+      --max-model-len "$MAX_MODEL_LEN" \
+      --max-num-seqs "$MAX_NUM_SEQS" \
+      --enforce-eager >"$SERVER_LOG" 2>&1 &
+    server_pid=$!
+    server_group_pid=$server_pid
+  else
+    vllm serve "$MODEL_NAME" \
+      --host "$HOST" \
+      --port "$PORT" \
+      --dtype "$DTYPE" \
+      --max-model-len "$MAX_MODEL_LEN" \
+      --max-num-seqs "$MAX_NUM_SEQS" \
+      --enforce-eager >"$SERVER_LOG" 2>&1 &
+    server_pid=$!
+  fi
+}
+
+allocate_local_port() {
+  python - <<'PY'
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+}
+
 trap cleanup EXIT
+
+if [[ -z "$PORT" ]]; then
+  PORT=$(allocate_local_port)
+fi
 
 mkdir -p "$RESULT_ROOT" "$SUBMISSIONS_ROOT" "$AGGREGATE_OUTPUT_DIR"
 
@@ -164,6 +214,7 @@ echo "benchmark target ref: $ASCEND_HUST_TARGET_REF"
 echo "benchmark target sha: $ASCEND_HUST_TARGET_SHA"
 echo "run id: $RUN_ID"
 echo "result root: $RESULT_ROOT"
+echo "benchmark port: $PORT"
 echo "benchmark scenario: $BENCH_SCENARIO"
 echo "publish to hf: $PUBLISH_TO_HF"
 
@@ -231,17 +282,10 @@ if [[ "$CHIP_COUNT" == "1" && -z "${ASCEND_RT_VISIBLE_DEVICES:-}" ]]; then
   fi
 fi
 
-vllm serve "$MODEL_NAME" \
-  --host "$HOST" \
-  --port "$PORT" \
-  --dtype "$DTYPE" \
-  --max-model-len "$MAX_MODEL_LEN" \
-  --max-num-seqs "$MAX_NUM_SEQS" \
-  --enforce-eager >"$SERVER_LOG" 2>&1 &
-server_pid=$!
+start_server
 
 for attempt in $(seq 1 120); do
-  if curl -fsS "http://$HOST:$PORT/health" >/dev/null; then
+  if curl -fsS "http://$HOST:$PORT/v1/models" >/dev/null; then
     break
   fi
 
@@ -269,18 +313,26 @@ vllm bench serve \
   --result-dir "$RESULT_ROOT" \
   --result-filename "$(basename "$RAW_RESULT_FILE")"
 
-ENGINE_VERSION=$(python - <<'PY'
+CORE_VERSION=$(python - <<'PY'
 import vllm
 print(vllm.__version__)
 PY
 )
+
+BACKEND_VERSION=$(python - <<'PY'
+from vllm_ascend._version import __version__
+print(__version__)
+PY
+)
+
+ENGINE_VERSION="$ASCEND_HUST_TARGET_SHA_SHORT"
 
 python -m vllm_hust_benchmark.cli submit \
   "$BENCH_SCENARIO" \
   --benchmark-result-file "$RAW_RESULT_FILE" \
   --constraints-file "$EFFECTIVE_CONSTRAINTS_FILE" \
   --run-id "$RUN_ID" \
-  --engine vllm-hust \
+  --engine vllm-ascend-hust \
   --engine-version "$ENGINE_VERSION" \
   --model-name "$MODEL_NAME" \
   --model-parameters "$MODEL_PARAMETERS" \
@@ -294,6 +346,8 @@ python -m vllm_hust_benchmark.cli submit \
   --input-length "$EFFECTIVE_INPUT_LEN" \
   --output-length "$EFFECTIVE_OUTPUT_LEN" \
   --concurrent-requests "$BENCH_MAX_CONCURRENCY" \
+  --backend-version "$BACKEND_VERSION" \
+  --core-version "$CORE_VERSION" \
   --git-commit "$ASCEND_HUST_TARGET_SHA" \
   --github-commit-url "$ASCEND_HUST_TARGET_COMMIT_URL" \
   --github-repository "$ASCEND_HUST_TARGET_REPOSITORY" \
