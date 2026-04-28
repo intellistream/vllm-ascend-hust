@@ -427,7 +427,7 @@ class AscendAttentionBackendImpl(AttentionImpl):
     def _mark_fia_unsupported(
         self,
         attn_state: AscendAttentionState,
-        error: RuntimeError,
+        error: Exception,
     ) -> None:
         self._fia_unsupported_profiles.add((self.head_size, attn_state))
         self._log_fused_attention_fallback(attn_state, str(error))
