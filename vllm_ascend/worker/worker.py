@@ -21,10 +21,10 @@ import copy
 import gc
 import math
 import os
-import re
 import subprocess
 from types import NoneType
 
+import regex as re
 import torch
 import torch.nn as nn
 import torch_npu

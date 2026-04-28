@@ -25,7 +25,7 @@ import torch_npu
 import vllm.envs as envs_vllm
 from vllm.config import CUDAGraphMode, VllmConfig, get_current_vllm_config
 from vllm.forward_context import get_forward_context
-from vllm.logger import init_logger
+from vllm.logger import logger
 from vllm.utils.math_utils import cdiv
 from vllm.v1.attention.backend import (  # type: ignore
     AttentionBackend,
@@ -63,8 +63,6 @@ from vllm_ascend.utils import weak_ref_tensors
 
 # default max value of sliding window size
 SWA_INT_MAX = 2147483647
-
-logger = init_logger(__name__)
 
 ACLGRAPH_DECODE_ATTENTION_RETRY_ERROR = "ACLGraph decode attention fallback should retry eagerly"
 
@@ -402,8 +400,7 @@ class AscendAttentionBackendImpl(AttentionImpl):
             return
         self._warned_fallback_profiles.add(profile)
         logger.warning(
-            "Falling back from npu_fused_infer_attention_score for head_size=%s state=%s. "
-            "Reason: %s",
+            "Falling back from npu_fused_infer_attention_score for head_size=%s state=%s. Reason: %s",
             self.head_size,
             attn_state.name,
             reason,
@@ -438,10 +435,7 @@ class AscendAttentionBackendImpl(AttentionImpl):
     @staticmethod
     def _is_aclgraph_runtime_active() -> bool:
         forward_context = get_forward_context()
-        return (
-            forward_context is not None
-            and forward_context.cudagraph_runtime_mode != CUDAGraphMode.NONE
-        )
+        return forward_context is not None and forward_context.cudagraph_runtime_mode != CUDAGraphMode.NONE
 
     def _fallback_when_fia_unavailable(
         self,
@@ -451,10 +445,7 @@ class AscendAttentionBackendImpl(AttentionImpl):
         attn_metadata: AscendMetadata,
         output: torch.Tensor,
     ) -> torch.Tensor:
-        if (
-            attn_metadata.attn_state == AscendAttentionState.DecodeOnly
-            and self._is_aclgraph_runtime_active()
-        ):
+        if attn_metadata.attn_state == AscendAttentionState.DecodeOnly and self._is_aclgraph_runtime_active():
             raise RuntimeError(
                 f"{ACLGRAPH_DECODE_ATTENTION_RETRY_ERROR}: "
                 f"head_size={self.head_size}, state={attn_metadata.attn_state.name}"
@@ -483,12 +474,15 @@ class AscendAttentionBackendImpl(AttentionImpl):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         key_cache, value_cache = self._resolve_kv_cache_tensors(kv_cache)
         if key_cache is None or value_cache is None:
+            kv_cache_len = len(kv_cache) if not isinstance(kv_cache, torch.Tensor) else "tensor"
+            has_first_entry = not isinstance(kv_cache, torch.Tensor) and len(kv_cache) > 0
+            first_entry = kv_cache[0] if has_first_entry else None
             raise RuntimeError(
                 "Unable to resolve decode KV cache for materialized fallback: "
                 f"kv_cache_type={type(kv_cache).__name__}, "
-                f"kv_cache_len={len(kv_cache) if not isinstance(kv_cache, torch.Tensor) else 'tensor'}, "
-                f"first_entry_type={type(kv_cache[0]).__name__ if not isinstance(kv_cache, torch.Tensor) and len(kv_cache) > 0 else 'n/a'}, "
-                f"first_entry_shape={tuple(kv_cache[0].shape) if not isinstance(kv_cache, torch.Tensor) and len(kv_cache) > 0 and isinstance(kv_cache[0], torch.Tensor) else 'n/a'}, "
+                f"kv_cache_len={kv_cache_len}, "
+                f"first_entry_type={type(first_entry).__name__ if first_entry is not None else 'n/a'}, "
+                f"first_entry_shape={tuple(first_entry.shape) if isinstance(first_entry, torch.Tensor) else 'n/a'}, "
                 f"self_key_cache_set={self.key_cache is not None}, "
                 f"self_value_cache_set={self.value_cache is not None}"
             )
@@ -503,12 +497,12 @@ class AscendAttentionBackendImpl(AttentionImpl):
                 device=key_cache.device,
                 dtype=torch.long,
             )
-            request_keys = key_cache.index_select(0, block_indices).reshape(
-                -1, self.num_kv_heads, self.head_size
-            )[:seq_len]
-            request_values = value_cache.index_select(0, block_indices).reshape(
-                -1, self.num_kv_heads, self.head_size
-            )[:seq_len]
+            request_keys = key_cache.index_select(0, block_indices).reshape(-1, self.num_kv_heads, self.head_size)[
+                :seq_len
+            ]
+            request_values = value_cache.index_select(0, block_indices).reshape(-1, self.num_kv_heads, self.head_size)[
+                :seq_len
+            ]
             materialized_keys.append(request_keys)
             materialized_values.append(request_values)
 
@@ -1148,13 +1142,12 @@ class AscendAttentionBackendImpl(AttentionImpl):
                     attn_metadata,
                     output,
                 )
-            elif (
-                using_paged_attention(num_tokens, self.vllm_config)
-                or not self._supports_tnd_fused_infer_attention(attn_metadata.attn_state)
+            elif using_paged_attention(num_tokens, self.vllm_config) or not self._supports_tnd_fused_infer_attention(
+                attn_metadata.attn_state
             ):
                 if (
-                not self._supports_tnd_fused_infer_attention(attn_metadata.attn_state)
-                and self._is_aclgraph_runtime_active()
+                    not self._supports_tnd_fused_infer_attention(attn_metadata.attn_state)
+                    and self._is_aclgraph_runtime_active()
                 ):
                     raise RuntimeError(
                         f"{ACLGRAPH_DECODE_ATTENTION_RETRY_ERROR}: "

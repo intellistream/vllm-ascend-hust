@@ -1,5 +1,5 @@
 import torch
-from vllm.logger import init_logger
+from vllm.logger import logger
 from vllm.v1.sample.ops.topk_topp_sampler import TopKTopPSampler
 from vllm.v1.sample.sampler import Sampler
 
@@ -8,14 +8,12 @@ from vllm_ascend.compat import is_batch_invariant_enabled
 from vllm_ascend.utils import AscendDeviceType, get_ascend_device_type, global_stream, npu_stream_switch
 
 DEFAULT_LOGPROBS_MODE = "raw_logprobs"
-logger = init_logger(__name__)
 _warned_topk_topp_fallback = False
 
 
 def _has_ascendc_topk_topp() -> bool:
     try:
-        getattr(torch.ops._C_ascend, "npu_apply_top_k_top_p")
-        return True
+        return hasattr(torch.ops._C_ascend, "npu_apply_top_k_top_p")
     except AttributeError:
         return False
 

@@ -227,12 +227,7 @@ class OProjRowParallelOp(CustomRowParallelOp):
         # Reuse the receive buffer across iterations to reduce per-step
         # device allocation overhead on the all-to-all path.
         buf = self._a2a_recv_buf
-        if (
-            buf is None
-            or buf.numel() < numel
-            or buf.dtype != ref_tensor.dtype
-            or buf.device != ref_tensor.device
-        ):
+        if buf is None or buf.numel() < numel or buf.dtype != ref_tensor.dtype or buf.device != ref_tensor.device:
             buf = torch.empty(numel, dtype=ref_tensor.dtype, device=ref_tensor.device)
             self._a2a_recv_buf = buf
         return buf[:numel]
@@ -310,12 +305,7 @@ class Flashcomm2OProjRowParallelOp(CustomRowParallelOp):
 
     def _get_otp_recv_buf(self, numel: int, ref_tensor: torch.Tensor) -> torch.Tensor:
         buf = self._otp_recv_buf
-        if (
-            buf is None
-            or buf.numel() < numel
-            or buf.dtype != ref_tensor.dtype
-            or buf.device != ref_tensor.device
-        ):
+        if buf is None or buf.numel() < numel or buf.dtype != ref_tensor.dtype or buf.device != ref_tensor.device:
             buf = torch.empty(numel, dtype=ref_tensor.dtype, device=ref_tensor.device)
             self._otp_recv_buf = buf
         return buf[:numel]

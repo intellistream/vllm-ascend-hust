@@ -104,8 +104,7 @@ def get_chip_type() -> str:
             raise ValueError(f"Unable to recognize chip name: {chip_name}, please manually set env SOC_VERSION")
     except subprocess.CalledProcessError as e:
         logging.warning(
-            "npu-smi command failed, falling back to SOC_VERSION if it is already set. "
-            "Original error: %s",
+            "npu-smi command failed, falling back to SOC_VERSION if it is already set. Original error: %s",
             e,
         )
         return ""
