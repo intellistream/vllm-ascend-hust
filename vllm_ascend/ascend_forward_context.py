@@ -1,5 +1,5 @@
-import math
 import inspect
+import math
 from contextlib import contextmanager
 from enum import Enum
 from typing import Any

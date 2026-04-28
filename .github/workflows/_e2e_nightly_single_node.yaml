@@ -43,6 +43,9 @@ on:
       should_run:
         required: true
         type: boolean
+    secrets:
+      VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY:
+        required: false
 
 # Bash shells do not use ~/.profile or ~/.bashrc so these shells need to be explicitly
 # declared as "shell: bash -el {0}" on steps that need to be properly activated.
@@ -67,6 +70,7 @@ jobs:
       image: ${{ inputs.image }}
     env:
       HOME: ${{ github.workspace }}
+      CHECKOUT_USE_SSH_443: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY != '' && '1' || '0' }}
       HF_HUB_OFFLINE: 1
       VLLM_USE_MODELSCOPE: True
       UV_INDEX_URL: http://cache-service.nginx-pypi-cache.svc.cluster.local/pypi/simple
@@ -81,6 +85,24 @@ jobs:
           npu-smi info
           cat /usr/local/Ascend/ascend-toolkit/latest/"$(uname -i)"-linux/ascend_toolkit_install.info
           pip install uv
+
+      - name: Ensure SSH client is available
+        if: ${{ github.event_name == 'pull_request' && env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          if command -v ssh >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -y
+            apt-get install -y openssh-client
+          elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y openssh-clients
+          elif command -v yum >/dev/null 2>&1; then
+            yum install -y openssh-clients
+          else
+            echo "ssh client is required for actions/checkout with ssh-key" >&2
+            exit 1
+          fi
       
       - name: uninstall vlm vllm-ascend and remove code (if pr test)
         if: ${{ github.event_name == 'pull_request' }}
@@ -88,6 +110,26 @@ jobs:
           pip uninstall -y vllm vllm-ascend || true
           cp -r /vllm-workspace/vllm-ascend/benchmark /tmp/aisbench-backup || true
           rm -rf /vllm-workspace/vllm /vllm-workspace/vllm-ascend
+
+      - name: Configure GitHub SSH over 443
+        if: ${{ github.event_name == 'pull_request' && env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' '${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}' > "$HOME/.ssh/github_actions"
+          chmod 600 "$HOME/.ssh/github_actions"
+          cat > "$HOME/.ssh/config" <<'EOF'
+          Host github.com
+            HostName ssh.github.com
+            Port 443
+            User git
+            HostKeyAlias github.com
+            IdentityFile ~/.ssh/github_actions
+            IdentitiesOnly yes
+            StrictHostKeyChecking no
+          EOF
+          chmod 600 "$HOME/.ssh/config"
+          git config --global url."ssh://git@ssh.github.com:443/".insteadOf https://github.com/
 
       - name: Checkout vllm-project/vllm repo
         if: ${{ github.event_name == 'pull_request' }}
@@ -97,6 +139,9 @@ jobs:
           ref: ${{ inputs.vllm_version }}
           path: ./temp-vllm 
           fetch-depth: 1
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
 
       - name: Checkout vllm-project/vllm-ascend repo
         if: ${{ github.event_name == 'pull_request' }}
@@ -104,6 +149,9 @@ jobs:
         with:
           path: ./temp-vllm-ascend
           fetch-depth: 1
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
 
       - name: Move code to /vllm-workspace
         if: ${{ github.event_name == 'pull_request' }}

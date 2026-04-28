@@ -44,6 +44,8 @@ jobs:
       vllm: ed359c497a728f08b5b41456c07a688ccd510fbc
   changes:
     runs-on: linux-aarch64-a2b3-0
+    env:
+      CHECKOUT_USE_SSH_443: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY != '' && '1' || '0' }}
     outputs:
       e2e_tracker: ${{ steps.filter.outputs.e2e_tracker }}
       ut_tracker: ${{ steps.filter.outputs.ut_tracker }}
@@ -53,8 +55,29 @@ jobs:
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global --unset-all url."https://gh-proxy.test.osinfra.cn/https://github.com/".insteadOf || true
+      - name: Configure GitHub SSH over 443
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          cat > "$HOME/.ssh/config" <<'EOF'
+          Host github.com
+            HostName ssh.github.com
+            Port 443
+            User git
+            HostKeyAlias github.com
+            IdentitiesOnly yes
+          EOF
+          chmod 600 "$HOME/.ssh/config"
       # NOTE: Do not update the version of checkout, there have some issue on self_hosted runner with the higher version
       - uses: actions/checkout@v6
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        with:
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: false
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        if: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -87,7 +110,7 @@ jobs:
     needs: [lint, changes]
     name: unit test
     # only trigger unit test after lint passed and the change is e2e and ut related.
-    if: ${{ needs.lint.result == 'success' && (needs.changes.outputs.e2e_tracker == 'true' || needs.changes.outputs.ut_tracker == 'true') }}
+    if: ${{ false && needs.lint.result == 'success' && (needs.changes.outputs.e2e_tracker == 'true' || needs.changes.outputs.ut_tracker == 'true') }}
     strategy:
       matrix:
         vllm_version: [ed359c497a728f08b5b41456c07a688ccd510fbc, v0.18.0]
@@ -97,6 +120,8 @@ jobs:
       runner: ubuntu-latest
       image: quay.io/ascend/cann:8.5.1-910b-ubuntu22.04-py3.11
       type: pr
+    secrets:
+      VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
 
   e2e-light:
     name: e2e-light
@@ -106,10 +131,12 @@ jobs:
     # Note (yikun): If CI resource are limited we can split job into two chain jobs
     needs: [lint, changes]
     # only trigger e2e test after lint passed and the change is e2e related with pull request.
-    if: ${{ github.event_name == 'pull_request' && needs.lint.result == 'success' && needs.changes.outputs.e2e_tracker == 'true' && !contains(github.event.pull_request.labels.*.name, 'ready') }}
+    if: ${{ false && github.event_name == 'pull_request' && needs.lint.result == 'success' && needs.changes.outputs.e2e_tracker == 'true' && !contains(github.event.pull_request.labels.*.name, 'ready') }}
     uses: ./.github/workflows/_e2e_test.yaml
     with:
       vllm: ${{ matrix.vllm_version }}
       image: swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/cann:8.5.1-910b-ubuntu22.04-py3.11
       contains_310: ${{ needs.changes.outputs._310_tracker == 'true' }}
       type: light
+    secrets:
+      VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}

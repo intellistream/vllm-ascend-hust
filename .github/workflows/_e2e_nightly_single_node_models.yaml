@@ -43,6 +43,9 @@ on:
       is_run:
         required: true
         type: boolean
+    secrets:
+      VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY:
+        required: false
 
 # Bash shells do not use ~/.profile or ~/.bashrc so these shells need to be explicitly
 # declared as "shell: bash -el {0}" on steps that need to be properly activated.
@@ -64,6 +67,7 @@ jobs:
     if: ${{ inputs.is_run }}
     env:
       HOME: ${{ github.workspace }}
+      CHECKOUT_USE_SSH_443: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY != '' && '1' || '0' }}
     container:
       image: "${{ inputs.image }}"
       env:
@@ -80,17 +84,60 @@ jobs:
           npu-smi info
           cat /usr/local/Ascend/ascend-toolkit/latest/"$(uname -i)"-linux/ascend_toolkit_install.info
 
+      - name: Ensure SSH client is available
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          if command -v ssh >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -y
+            apt-get install -y openssh-client
+          elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y openssh-clients
+          elif command -v yum >/dev/null 2>&1; then
+            yum install -y openssh-clients
+          else
+            echo "ssh client is required for actions/checkout with ssh-key" >&2
+            exit 1
+          fi
+
       - name: Config mirrors
         run: |
           sed -i 's|ports.ubuntu.com|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list
           pip config set global.index-url https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
           apt-get update -y
           apt install git -y
-          git config --global --add safe.directory /__w/vllm-ascend/vllm-ascend
+          git config --global --add safe.directory /__w/vllm-ascend-hust/vllm-ascend-hust
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global --unset-all url."https://gh-proxy.test.osinfra.cn/https://github.com/".insteadOf || true
+
+      - name: Configure GitHub SSH over 443
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' '${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}' > "$HOME/.ssh/github_actions"
+          chmod 600 "$HOME/.ssh/github_actions"
+          cat > "$HOME/.ssh/config" <<'EOF'
+          Host github.com
+            HostName ssh.github.com
+            Port 443
+            User git
+            HostKeyAlias github.com
+            IdentityFile ~/.ssh/github_actions
+            IdentitiesOnly yes
+            StrictHostKeyChecking no
+          EOF
+          chmod 600 "$HOME/.ssh/config"
+          git config --global url."ssh://git@ssh.github.com:443/".insteadOf https://github.com/
 
       - name: Checkout vllm-project/vllm-ascend repo
         uses: actions/checkout@v6
+        with:
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
 
       - name: Install system dependencies
         run: |
@@ -107,6 +154,9 @@ jobs:
           repository: vllm-project/vllm
           ref: ${{ inputs.vllm }}
           path: ./vllm-empty
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
 
       - name: Install vllm-project/vllm from source
         working-directory: ./vllm-empty
@@ -150,6 +200,9 @@ jobs:
           repository: vllm-project/vllm-ascend
           path: ./vllm-ascend
           ref: ${{ env.GHA_VLLM_ASCEND_VERSION }}
+          ssh-key: ${{ secrets.VLLM_ASCEND_HUST_BENCHMARK_SSH_KEY }}
+          ssh-strict: ${{ env.CHECKOUT_USE_SSH_443 != '1' }}
+          persist-credentials: false
 
       - name: Get vLLM commit hash and URL
         working-directory: ./vllm-empty
