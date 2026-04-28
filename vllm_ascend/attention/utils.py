@@ -216,6 +216,13 @@ def filter_chunked_req_indices(
     return filtered_indices
 
 
+def _find_first_true_boundary(sorted_mask: torch.Tensor) -> int:
+    """Return the index of the first True in a monotonic False->True mask."""
+    if sorted_mask.numel() == 0:
+        return 0
+    return int(torch.searchsorted(sorted_mask.to(dtype=torch.int32), 1).item())
+
+
 def split_decodes_and_prefills(
     common_attn_metadata: AscendCommonAttentionMetadata,
     decode_threshold: int = 1,
@@ -250,10 +257,10 @@ def split_decodes_and_prefills(
 
     query_lens = (query_start_loc[1:] - query_start_loc[:-1]) if query_lens_pcp_full is None else query_lens_pcp_full
     is_prefill = query_lens > decode_threshold
-    if not torch.any(is_prefill):
+    first_prefill = _find_first_true_boundary(is_prefill)
+    if first_prefill == num_reqs:
         return num_reqs, 0, num_tokens, 0
 
-    first_prefill = is_prefill.int().argmax(dim=-1).item()
     num_decodes = first_prefill
     num_prefills = num_reqs - num_decodes
     num_decode_tokens = query_start_loc[first_prefill].item()
