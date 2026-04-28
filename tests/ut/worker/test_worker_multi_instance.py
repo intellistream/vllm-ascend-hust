@@ -24,6 +24,7 @@ from vllm.utils.mem_constants import GiB_bytes
 from tests.ut.base import TestBase
 from vllm_ascend.worker.worker import (
     _format_startup_memory_error,
+    _get_visible_ascend_device_count,
     _maybe_auto_select_idle_ascend_device,
     _parse_npu_smi_hbm_stats,
     _parse_npu_smi_logical_map,
@@ -304,8 +305,7 @@ def test_auto_select_idle_ascend_device_sets_visible_device(monkeypatch):
     parallel_config = SimpleNamespace(world_size=1, local_world_size=1)
 
     with patch("vllm_ascend.worker.worker.logger") as mock_logger, \
-        patch("torch.npu.is_available", return_value=True), \
-        patch("torch.npu.device_count", return_value=8), \
+        patch("vllm_ascend.worker.worker._get_visible_ascend_device_count", return_value=8), \
         patch(
             "vllm_ascend.worker.worker._select_best_idle_ascend_device",
             return_value=(6, int(61.5 * GiB_bytes), int(64 * GiB_bytes)),
@@ -320,10 +320,30 @@ def test_auto_select_idle_ascend_device_skips_multi_worker(monkeypatch):
     monkeypatch.delenv("ASCEND_RT_VISIBLE_DEVICES", raising=False)
     parallel_config = SimpleNamespace(world_size=2, local_world_size=2)
 
-    with patch("torch.npu.is_available", return_value=True), \
-        patch("torch.npu.device_count", return_value=8), \
+    with patch("vllm_ascend.worker.worker._get_visible_ascend_device_count", return_value=8), \
         patch("vllm_ascend.worker.worker._select_best_idle_ascend_device") as mock_selector:
         _maybe_auto_select_idle_ascend_device(local_rank=0, parallel_config=parallel_config)
 
     assert "ASCEND_RT_VISIBLE_DEVICES" not in os.environ
     mock_selector.assert_not_called()
+
+
+def test_get_visible_ascend_device_count_prefers_env_without_torch_init(monkeypatch):
+    monkeypatch.setenv("ASCEND_RT_VISIBLE_DEVICES", "3")
+
+    with patch("vllm_ascend.worker.worker.subprocess.run") as mock_run:
+        assert _get_visible_ascend_device_count() == 1
+
+    mock_run.assert_not_called()
+
+
+def test_auto_select_idle_ascend_device_avoids_torch_device_count_before_visibility(monkeypatch):
+    monkeypatch.delenv("ASCEND_RT_VISIBLE_DEVICES", raising=False)
+    parallel_config = SimpleNamespace(world_size=1, local_world_size=1)
+
+    with patch("vllm_ascend.worker.worker._get_visible_ascend_device_count", return_value=8), \
+        patch("vllm_ascend.worker.worker._select_best_idle_ascend_device", return_value=(6, int(61.5 * GiB_bytes), int(64 * GiB_bytes))), \
+        patch("torch.npu.device_count", side_effect=AssertionError("torch.npu.device_count should not run before visibility is fixed")):
+        _maybe_auto_select_idle_ascend_device(local_rank=0, parallel_config=parallel_config)
+
+    assert os.environ["ASCEND_RT_VISIBLE_DEVICES"] == "6"

@@ -204,6 +204,25 @@ def _select_best_idle_ascend_device(visible_device_count: int) -> tuple[int, int
     return device_stats[0]
 
 
+def _get_visible_ascend_device_count() -> int:
+    visible_devices = os.environ.get("ASCEND_RT_VISIBLE_DEVICES", "")
+    if visible_devices.strip():
+        return len([device for device in visible_devices.split(",") if device.strip()])
+
+    mapping_result = subprocess.run(
+        ["npu-smi", "info", "-m"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    if mapping_result.returncode != 0:
+        raise RuntimeError(mapping_result.stderr.strip() or "npu-smi info -m failed")
+
+    logical_map = _parse_npu_smi_logical_map(mapping_result.stdout)
+    return len(set(logical_map.values()))
+
+
 def _maybe_auto_select_idle_ascend_device(local_rank: int, parallel_config) -> None:
     if os.environ.get("ASCEND_RT_VISIBLE_DEVICES"):
         return
@@ -217,7 +236,12 @@ def _maybe_auto_select_idle_ascend_device(local_rank: int, parallel_config) -> N
     if getattr(parallel_config, "local_world_size", 1) != 1:
         return
 
-    visible_device_count = torch.npu.device_count() if torch.npu.is_available() else 0
+    try:
+        visible_device_count = _get_visible_ascend_device_count()
+    except Exception as exc:
+        logger.info("Unable to inspect Ascend visibility before auto-selection: %s", exc)
+        return
+
     if visible_device_count <= 1:
         return
 
