@@ -84,6 +84,24 @@ jobs:
           npu-smi info
           cat /usr/local/Ascend/ascend-toolkit/latest/"$(uname -i)"-linux/ascend_toolkit_install.info
 
+      - name: Ensure SSH client is available
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          if command -v ssh >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -y
+            apt-get install -y openssh-client
+          elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y openssh-clients
+          elif command -v yum >/dev/null 2>&1; then
+            yum install -y openssh-clients
+          else
+            echo "ssh client is required for actions/checkout with ssh-key" >&2
+            exit 1
+          fi
+
       - name: Config mirrors
         run: |
           sed -i 's|ports.ubuntu.com|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list

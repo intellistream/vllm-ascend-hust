@@ -48,6 +48,23 @@ jobs:
         VLLM_USE_MODELSCOPE: True
         HF_HUB_OFFLINE: 1
     steps:
+      - name: Ensure SSH client is available
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          if command -v ssh >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -y
+            apt-get install -y openssh-client
+          elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y openssh-clients
+          elif command -v yum >/dev/null 2>&1; then
+            yum install -y openssh-clients
+          else
+            echo "ssh client is required for actions/checkout with ssh-key" >&2
+            exit 1
+          fi
       - name: Configure GitHub SSH over 443
         if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
         run: |
@@ -183,6 +200,23 @@ jobs:
         HF_HUB_OFFLINE: 1
         MODELSCOPE_HUB_FILE_LOCK: False
     steps:
+      - name: Ensure SSH client is available
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          if command -v ssh >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -y
+            apt-get install -y openssh-client
+          elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y openssh-clients
+          elif command -v yum >/dev/null 2>&1; then
+            yum install -y openssh-clients
+          else
+            echo "ssh client is required for actions/checkout with ssh-key" >&2
+            exit 1
+          fi
       - name: Configure GitHub SSH over 443
         if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
         run: |
@@ -317,6 +351,23 @@ jobs:
         HCCL_BUFFSIZE: 1024
         HF_HUB_OFFLINE: 1
     steps:
+      - name: Ensure SSH client is available
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          if command -v ssh >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -y
+            apt-get install -y openssh-client
+          elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y openssh-clients
+          elif command -v yum >/dev/null 2>&1; then
+            yum install -y openssh-clients
+          else
+            echo "ssh client is required for actions/checkout with ssh-key" >&2
+            exit 1
+          fi
       - name: Configure GitHub SSH over 443
         if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
         run: |
@@ -450,6 +501,23 @@ jobs:
         HCCL_BUFFSIZE: 1024
         HF_HUB_OFFLINE: 1
     steps:
+      - name: Ensure SSH client is available
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          if command -v ssh >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -y
+            apt-get install -y openssh-client
+          elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y openssh-clients
+          elif command -v yum >/dev/null 2>&1; then
+            yum install -y openssh-clients
+          else
+            echo "ssh client is required for actions/checkout with ssh-key" >&2
+            exit 1
+          fi
       - name: Configure GitHub SSH over 443
         if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
         run: |
@@ -602,6 +670,23 @@ jobs:
         VLLM_USE_MODELSCOPE: True
         HF_HUB_OFFLINE: 1
     steps:
+      - name: Ensure SSH client is available
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          if command -v ssh >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -y
+            apt-get install -y openssh-client
+          elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y openssh-clients
+          elif command -v yum >/dev/null 2>&1; then
+            yum install -y openssh-clients
+          else
+            echo "ssh client is required for actions/checkout with ssh-key" >&2
+            exit 1
+          fi
       - name: Configure GitHub SSH over 443
         if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
         run: |
@@ -731,6 +816,23 @@ jobs:
         VLLM_USE_MODELSCOPE: True
         HF_HUB_OFFLINE: 1
     steps:
+      - name: Ensure SSH client is available
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          if command -v ssh >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -y
+            apt-get install -y openssh-client
+          elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y openssh-clients
+          elif command -v yum >/dev/null 2>&1; then
+            yum install -y openssh-clients
+          else
+            echo "ssh client is required for actions/checkout with ssh-key" >&2
+            exit 1
+          fi
       - name: Configure GitHub SSH over 443
         if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
         run: |
@@ -836,6 +938,23 @@ jobs:
         VLLM_USE_MODELSCOPE: True
         HF_HUB_OFFLINE: 1
     steps:
+      - name: Ensure SSH client is available
+        if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
+        run: |
+          if command -v ssh >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -y
+            apt-get install -y openssh-client
+          elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y openssh-clients
+          elif command -v yum >/dev/null 2>&1; then
+            yum install -y openssh-clients
+          else
+            echo "ssh client is required for actions/checkout with ssh-key" >&2
+            exit 1
+          fi
       - name: Configure GitHub SSH over 443
         if: ${{ env.CHECKOUT_USE_SSH_443 == '1' }}
         run: |
