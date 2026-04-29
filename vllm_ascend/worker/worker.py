@@ -223,45 +223,45 @@ def _get_visible_ascend_device_count() -> int:
     return len(set(logical_map.values()))
 
 
-def _maybe_auto_select_idle_ascend_device(local_rank: int, parallel_config) -> None:
+def _maybe_auto_select_idle_ascend_device(local_rank: int, parallel_config) -> int | None:
     if os.environ.get("ASCEND_RT_VISIBLE_DEVICES"):
-        return
+        return None
 
     if local_rank != 0:
-        return
+        return None
 
     if getattr(parallel_config, "world_size", 1) != 1:
-        return
+        return None
 
     if getattr(parallel_config, "local_world_size", 1) != 1:
-        return
+        return None
 
     try:
         visible_device_count = _get_visible_ascend_device_count()
     except Exception as exc:
         logger.info("Unable to inspect Ascend visibility before auto-selection: %s", exc)
-        return
+        return None
 
     if visible_device_count <= 1:
-        return
+        return None
 
     try:
         selected_device = _select_best_idle_ascend_device(visible_device_count)
     except Exception as exc:
         logger.info("Unable to auto-select an idle Ascend device: %s", exc)
-        return
+        return None
 
     if selected_device is None:
-        return
+        return None
 
     logical_id, free_memory, total_memory = selected_device
-    os.environ["ASCEND_RT_VISIBLE_DEVICES"] = str(logical_id)
     logger.info(
         "Auto-selected Ascend device %s for single-card startup (free %.2f/%.2f GiB).",
         logical_id,
         free_memory / GiB_bytes,
         total_memory / GiB_bytes,
     )
+    return logical_id
 
 
 class NPUWorker(WorkerBase):
@@ -443,10 +443,26 @@ class NPUWorker(WorkerBase):
         self.cache_config.num_cpu_blocks = num_cpu_blocks
 
     def _init_device(self):
-        _maybe_auto_select_idle_ascend_device(self.local_rank, self.parallel_config)
+        selected_device = _maybe_auto_select_idle_ascend_device(
+            self.local_rank, self.parallel_config
+        )
+        device_index = selected_device if selected_device is not None else self.local_rank
 
-        device = torch.device(f"npu:{self.local_rank}")
-        torch.npu.set_device(device)
+        device = torch.device(f"npu:{device_index}")
+        try:
+            torch.npu.set_device(device)
+        except Exception as exc:
+            if selected_device is None or device_index == self.local_rank:
+                raise
+
+            logger.warning(
+                "Failed to initialize auto-selected Ascend device %s (%s); falling back to local_rank %s.",
+                device_index,
+                exc,
+                self.local_rank,
+            )
+            device = torch.device(f"npu:{self.local_rank}")
+            torch.npu.set_device(device)
 
         # Import _inductor for graph mode execution with triton
         # This lazy import avoids torch_npu re-initialization in patch
