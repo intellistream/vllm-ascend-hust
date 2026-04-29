@@ -302,15 +302,22 @@ class cmake_build_ext(build_ext):
         cmake_args += [f"-DCMAKE_INSTALL_PREFIX={install_path}"]
 
         try:
-            torch_cmake_prefix_path = (
-                subprocess.check_output(
-                    [python_executable, "-c", "import torch; print(torch.utils.cmake_prefix_path)"],
-                )
-                .decode()
-                .strip()
-            )
+            torch_cmake_prefix_output = subprocess.check_output(
+                [python_executable, "-c", "import torch; print(torch.utils.cmake_prefix_path)"],
+            ).decode()
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to locate torch CMake prefix path: {e}")
+
+        torch_cmake_prefix_path = next(
+            (
+                line.strip()
+                for line in reversed(torch_cmake_prefix_output.splitlines())
+                if line.strip() and os.path.isabs(line.strip())
+            ),
+            "",
+        )
+        if not torch_cmake_prefix_path:
+            raise RuntimeError(f"Failed to parse torch CMake prefix path from output: {torch_cmake_prefix_output!r}")
 
         cmake_prefix_paths = [pybind11_cmake_path, torch_cmake_prefix_path]
         cmake_args += [f"-DCMAKE_PREFIX_PATH={';'.join(path for path in cmake_prefix_paths if path)}"]
