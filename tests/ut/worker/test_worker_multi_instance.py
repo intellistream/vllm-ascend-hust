@@ -23,6 +23,7 @@ from vllm.utils.mem_constants import GiB_bytes
 
 from tests.ut.base import TestBase
 from vllm_ascend.worker.worker import (
+    NPUWorker,
     _format_startup_memory_error,
     _get_visible_ascend_device_count,
     _maybe_auto_select_idle_ascend_device,
@@ -347,3 +348,49 @@ def test_auto_select_idle_ascend_device_avoids_torch_device_count_before_visibil
         _maybe_auto_select_idle_ascend_device(local_rank=0, parallel_config=parallel_config)
 
     assert os.environ["ASCEND_RT_VISIBLE_DEVICES"] == "6"
+
+
+def test_init_device_retries_selected_physical_device_when_logical_binding_fails():
+    with patch.object(NPUWorker, "__init__", lambda self, **kwargs: None):
+        worker = NPUWorker()
+
+    worker.local_rank = 0
+    worker.parallel_config = SimpleNamespace(
+        world_size=1,
+        local_world_size=1,
+        data_parallel_size=1,
+        data_parallel_size_local=1,
+        distributed_executor_backend="mp",
+    )
+    worker.vllm_config = SimpleNamespace(
+        parallel_config=SimpleNamespace(
+            data_parallel_backend="mp",
+            nnodes_within_dp=1,
+        )
+    )
+    worker.cache_config = SimpleNamespace(gpu_memory_utilization=0.5)
+    worker.model_config = SimpleNamespace(seed=1)
+
+    mock_snapshot = MagicMock()
+    mock_snapshot.total_memory = 8 * GiB_bytes
+    mock_snapshot.free_memory = 8 * GiB_bytes
+
+    with patch("vllm_ascend.worker.worker._maybe_auto_select_idle_ascend_device", return_value=7), \
+        patch("vllm_ascend.worker.worker.torch.device", side_effect=lambda value: value), \
+        patch("vllm_ascend.worker.worker.torch.npu.set_device", side_effect=[RuntimeError("logical binding failed"), None]) as mock_set_device, \
+        patch("vllm_ascend.worker.worker.MemorySnapshot", return_value=mock_snapshot), \
+        patch("vllm_ascend.worker.worker.gc.collect"), \
+        patch("vllm_ascend.worker.worker.torch.npu.empty_cache"), \
+        patch("vllm_ascend.worker.worker.init_device_properties_triton"), \
+        patch("vllm_ascend.worker.worker.set_random_seed"), \
+        patch.object(NPUWorker, "_init_worker_distributed_environment"), \
+        patch("vllm_ascend.worker.worker.get_ascend_config", return_value=SimpleNamespace(enable_cpu_binding=False)), \
+        patch("vllm_ascend.worker.worker.logger") as mock_logger, \
+        patch("vllm_ascend.worker.worker.torch.npu.is_available", return_value=True), \
+        patch("vllm_ascend.worker.worker.torch.npu.device_count", return_value=1), \
+        patch("vllm.triton_utils.HAS_TRITON", False):
+        device = worker._init_device()
+
+    assert device == "npu:7"
+    assert mock_set_device.call_args_list == [(("npu:0",),), (("npu:7",),)]
+    mock_logger.warning.assert_called_once()

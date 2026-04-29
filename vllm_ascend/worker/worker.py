@@ -223,36 +223,36 @@ def _get_visible_ascend_device_count() -> int:
     return len(set(logical_map.values()))
 
 
-def _maybe_auto_select_idle_ascend_device(local_rank: int, parallel_config) -> None:
+def _maybe_auto_select_idle_ascend_device(local_rank: int, parallel_config) -> int | None:
     if os.environ.get("ASCEND_RT_VISIBLE_DEVICES"):
-        return
+        return None
 
     if local_rank != 0:
-        return
+        return None
 
     if getattr(parallel_config, "world_size", 1) != 1:
-        return
+        return None
 
     if getattr(parallel_config, "local_world_size", 1) != 1:
-        return
+        return None
 
     try:
         visible_device_count = _get_visible_ascend_device_count()
     except Exception as exc:
         logger.info("Unable to inspect Ascend visibility before auto-selection: %s", exc)
-        return
+        return None
 
     if visible_device_count <= 1:
-        return
+        return None
 
     try:
         selected_device = _select_best_idle_ascend_device(visible_device_count)
     except Exception as exc:
         logger.info("Unable to auto-select an idle Ascend device: %s", exc)
-        return
+        return None
 
     if selected_device is None:
-        return
+        return None
 
     logical_id, free_memory, total_memory = selected_device
     os.environ["ASCEND_RT_VISIBLE_DEVICES"] = str(logical_id)
@@ -262,6 +262,7 @@ def _maybe_auto_select_idle_ascend_device(local_rank: int, parallel_config) -> N
         free_memory / GiB_bytes,
         total_memory / GiB_bytes,
     )
+    return logical_id
 
 
 class NPUWorker(WorkerBase):
@@ -443,10 +444,23 @@ class NPUWorker(WorkerBase):
         self.cache_config.num_cpu_blocks = num_cpu_blocks
 
     def _init_device(self):
-        _maybe_auto_select_idle_ascend_device(self.local_rank, self.parallel_config)
+        selected_device_id = _maybe_auto_select_idle_ascend_device(self.local_rank, self.parallel_config)
 
         device = torch.device(f"npu:{self.local_rank}")
-        torch.npu.set_device(device)
+        try:
+            torch.npu.set_device(device)
+        except RuntimeError:
+            if selected_device_id is None or selected_device_id == self.local_rank:
+                raise
+
+            logger.warning(
+                "Failed to bind Ascend logical device %s after auto-selecting "
+                "physical device %s; retrying with the selected physical device.",
+                self.local_rank,
+                selected_device_id,
+            )
+            device = torch.device(f"npu:{selected_device_id}")
+            torch.npu.set_device(device)
 
         # Import _inductor for graph mode execution with triton
         # This lazy import avoids torch_npu re-initialization in patch
