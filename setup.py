@@ -22,6 +22,7 @@ import logging
 import os
 import subprocess
 import sys
+from pathlib import Path
 from sysconfig import get_paths
 
 from setuptools import Command, Extension, find_packages, setup
@@ -29,7 +30,6 @@ from setuptools.command.build_ext import build_ext
 from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 from setuptools.command.install import install
-from setuptools_scm import get_version
 
 
 def load_module_from_path(module_name, path):
@@ -42,6 +42,26 @@ def load_module_from_path(module_name, path):
 
 ROOT_DIR = os.path.dirname(__file__)
 logger = logging.getLogger(__name__)
+
+
+def resolve_version() -> str:
+    version_file = Path(ROOT_DIR) / "vllm_ascend" / "_version.py"
+
+    try:
+        from setuptools_scm import get_version
+
+        return get_version(write_to=str(version_file))
+    except (ImportError, LookupError):
+        namespace = {}
+        if version_file.exists():
+            exec(version_file.read_text(encoding="utf-8"), namespace)
+            version = namespace.get("__version__") or namespace.get("version")
+            if isinstance(version, str) and version:
+                return version
+
+        # The checkout action in github action CI does not checkout the tag. It
+        # only checks out the commit. In this case, we set a dummy version.
+        return "0.0.0"
 
 
 def check_or_set_default_env(cmake_args, env_name, env_variable, default_path=""):
@@ -453,12 +473,7 @@ class custom_install(install):
 
 
 ROOT_DIR = os.path.dirname(__file__)
-try:
-    VERSION = get_version(write_to="vllm_ascend/_version.py")
-except LookupError:
-    # The checkout action in github action CI does not checkout the tag. It
-    # only checks out the commit. In this case, we set a dummy version.
-    VERSION = "0.0.0"
+VERSION = resolve_version()
 
 ext_modules = []
 if envs.COMPILE_CUSTOM_KERNELS:
