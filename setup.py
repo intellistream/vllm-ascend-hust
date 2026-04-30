@@ -40,17 +40,18 @@ def load_module_from_path(module_name, path):
     return module
 
 
-ROOT_DIR = os.path.dirname(__file__)
+ROOT_DIR = str(Path(__file__).resolve().parent)
 logger = logging.getLogger(__name__)
 
 
 def resolve_version() -> str:
     version_file = Path(ROOT_DIR) / "vllm_ascend" / "_version.py"
+    version_file_rel = os.path.relpath(version_file, ROOT_DIR)
 
     try:
         from setuptools_scm import get_version
 
-        return get_version(write_to=str(version_file))
+        return get_version(root=ROOT_DIR, relative_to=__file__, write_to=version_file_rel)
     except (ImportError, LookupError):
         namespace = {}
         if version_file.exists():
