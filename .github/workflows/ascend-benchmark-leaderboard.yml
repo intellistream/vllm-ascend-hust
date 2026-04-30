@@ -253,11 +253,14 @@ jobs:
           mkdir -p "$HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME"
           source scripts/use_single_ascend_env.sh
           hust-ascend-manager setup --install-python-stack --non-interactive
-          python -m pip install --upgrade --retries 8 --timeout 120 "numpy<2.0.0" decorator
+          python -m pip install --upgrade --retries 8 --timeout 120 "numpy<2.0.0" decorator scipy
           python - <<'PY'
           import decorator
+          import scipy
+          import scipy.sparse
 
           print(f"decorator={decorator.__version__}")
+          print(f"scipy={scipy.__version__}")
           PY
           python - <<'PY'
           import torch
