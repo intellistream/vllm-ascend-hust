@@ -248,6 +248,14 @@ jobs:
         run: |
           mkdir -p "$HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME"
           source scripts/use_single_ascend_env.sh
+          hust-ascend-manager setup --install-python-stack --non-interactive
+          python - <<'PY'
+          import torch
+          import torch_npu
+
+          print(f"torch={torch.__version__}")
+          print(f"torch_npu={torch_npu.__version__}")
+          PY
           python -m pip install -e "$VLLM_HUST_REPO" --no-build-isolation --no-deps
           bash scripts/install_local_ascend_plugin.sh "$GITHUB_WORKSPACE"
           python -m pip install -e "${VLLM_HUST_BENCHMARK_REPO}[publish]" jsonschema
