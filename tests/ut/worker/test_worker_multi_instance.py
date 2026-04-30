@@ -16,6 +16,7 @@
 #
 
 import os
+import subprocess
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -29,6 +30,7 @@ from vllm_ascend.worker.worker import (
     _maybe_auto_select_idle_ascend_device,
     _parse_npu_smi_hbm_stats,
     _parse_npu_smi_logical_map,
+    _select_best_idle_ascend_device,
 )
 
 
@@ -299,6 +301,39 @@ def test_parse_npu_smi_hbm_stats_prefers_logical_ids_from_mapping():
         (4, (65536 - 58154) << 20, 65536 << 20),
         (7, (65536 - 3413) << 20, 65536 << 20),
     ]
+
+
+def test_select_best_idle_ascend_device_skips_unprobeable_candidate():
+    mapping_output = """
+        NPU ID                         Chip ID                        Chip Logic ID                  Chip Name
+        0                              0                              4                              Ascend 910B1
+        1                              0                              7                              Ascend 910B1
+    """
+    info_output = """
++------------------------------------------------------------------------------------------------+
+| NPU   Name                | Health        | Power(W)    Temp(C)           Hugepages-Usage(page)|
+| Chip                      | Bus-Id        | AICore(%)   Memory-Usage(MB)  HBM-Usage(MB)        |
++===========================+===============+====================================================+
+| 0     910B1               | OK            | 97.4        49                0    / 0             |
+| 0                         | 0000:C1:00.0  | 0           0    / 0          58154/ 65536         |
++===========================+===============+====================================================+
+| 1     910B1               | OK            | 94.8        49                0    / 0             |
+| 0                         | 0000:01:00.0  | 0           0    / 0          3413 / 65536         |
++===========================+===============+====================================================+
+    """
+
+    mapping_result = subprocess.CompletedProcess(["npu-smi", "info", "-m"], 0, stdout=mapping_output)
+    info_result = subprocess.CompletedProcess(["npu-smi", "info"], 0, stdout=info_output)
+
+    with patch("vllm_ascend.worker.worker.subprocess.run", side_effect=[mapping_result, info_result]), \
+        patch(
+            "vllm_ascend.worker.worker._probe_ascend_device_availability",
+            side_effect=lambda logical_id: logical_id == 4,
+        ) as mock_probe:
+        selected_device = _select_best_idle_ascend_device(visible_device_count=8)
+
+    assert selected_device == (4, (65536 - 58154) << 20, 65536 << 20)
+    assert [call.args[0] for call in mock_probe.call_args_list] == [7, 4]
 
 
 def test_auto_select_idle_ascend_device_sets_visible_device(monkeypatch):

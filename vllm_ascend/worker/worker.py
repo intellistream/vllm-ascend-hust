@@ -22,6 +22,7 @@ import gc
 import math
 import os
 import subprocess
+import sys
 from types import NoneType
 
 import regex as re
@@ -201,7 +202,35 @@ def _select_best_idle_ascend_device(visible_device_count: int) -> tuple[int, int
         return None
 
     device_stats.sort(key=lambda item: (-item[1], item[0]))
-    return device_stats[0]
+    for logical_id, free_memory, total_memory in device_stats:
+        if _probe_ascend_device_availability(logical_id):
+            return logical_id, free_memory, total_memory
+
+        logger.info(
+            "Skipping Ascend device %s during auto-selection because the runtime probe failed.",
+            logical_id,
+        )
+
+    return None
+
+
+def _probe_ascend_device_availability(logical_id: int) -> bool:
+    probe_env = os.environ.copy()
+    probe_env["ASCEND_RT_VISIBLE_DEVICES"] = str(logical_id)
+
+    probe = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            ("import torch; import torch_npu; torch.npu.set_device('npu:0'); torch.zeros(1, device='npu')"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        env=probe_env,
+    )
+    return probe.returncode == 0
 
 
 def _get_visible_ascend_device_count() -> int:
