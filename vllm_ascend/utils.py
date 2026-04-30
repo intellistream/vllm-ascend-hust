@@ -266,6 +266,10 @@ def enable_custom_op():
     if _CUSTOM_OP_ENABLED is not None:
         return _CUSTOM_OP_ENABLED
 
+    if not envs_ascend.COMPILE_CUSTOM_KERNELS:
+        _CUSTOM_OP_ENABLED = False
+        return _CUSTOM_OP_ENABLED
+
     # There are some customed operators which aren't implemented
     # with batch invariant in vllm-ascend, we need to disable them.
     # FIXME(linfeng): Currently custom op compilation and execution are partially available
