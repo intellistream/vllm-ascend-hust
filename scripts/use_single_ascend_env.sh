@@ -33,7 +33,12 @@ fi
 
 if [[ "${HUST_ASCEND_HAS_STREAM_ATTR:-0}" != "1" ]]; then
   echo "[WARN] Current Ascend runtime does not export aclrtSetStreamAttribute"
-  echo "[WARN] npugraph_ex requires a newer CANN runtime. vllm-ascend currently recommends CANN 8.5.0."
+  echo "[WARN] npugraph_ex requires a newer CANN runtime. vllm-ascend currently recommends CANN 8.5.1."
+fi
+
+if [[ -z "${HUST_ASCEND_RUNTIME_VERSION:-}" ]]; then
+  echo "[WARN] Could not detect the exact CANN runtime version from hust-ascend-manager output."
+  echo "[WARN] Current ASCEND_HOME_PATH resolves to ${ASCEND_HOME_PATH:-<unset>}."
 fi
 
 if [[ "${HUST_REQUIRE_NPUGRAPH:-0}" == "1" && "${HUST_ASCEND_HAS_STREAM_ATTR:-0}" != "1" ]]; then
