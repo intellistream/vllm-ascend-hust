@@ -46,6 +46,44 @@ if [[ "${HUST_REQUIRE_NPUGRAPH:-0}" == "1" && "${HUST_ASCEND_HAS_STREAM_ATTR:-0}
   return 1
 fi
 
+if [[ -n "${VLLM_ASCEND_HUST_REPO:-}" && -d "${VLLM_ASCEND_HUST_REPO}" ]]; then
+  expected_repo="$(cd "${VLLM_ASCEND_HUST_REPO}" && pwd -P)"
+  sanitized_pythonpath=""
+
+  IFS=':' read -r -a pythonpath_entries <<< "${PYTHONPATH:-}"
+  for entry in "${pythonpath_entries[@]}"; do
+    if [[ -z "${entry}" ]]; then
+      continue
+    fi
+
+    resolved_entry="$entry"
+    if [[ -d "${entry}" ]]; then
+      resolved_entry="$(cd "${entry}" && pwd -P)"
+    fi
+
+    if [[ "${resolved_entry}" != "${expected_repo}" && (
+      "${resolved_entry}" == */vllm-ascend-hust ||
+      -d "${resolved_entry}/vllm_ascend"
+    ) ]]; then
+      continue
+    fi
+
+    if [[ -n "${sanitized_pythonpath}" ]]; then
+      sanitized_pythonpath+=":${resolved_entry}"
+    else
+      sanitized_pythonpath="${resolved_entry}"
+    fi
+  done
+
+  if [[ -n "${sanitized_pythonpath}" ]]; then
+    export PYTHONPATH="${expected_repo}:${sanitized_pythonpath}"
+  else
+    export PYTHONPATH="${expected_repo}"
+  fi
+
+  echo "[INFO] PYTHONPATH prioritized for vllm-ascend-hust: ${expected_repo}"
+fi
+
 echo "[OK] Single Ascend runtime is configured"
 echo "  ASCEND_HOME_PATH=${ASCEND_HOME_PATH:-<unset>}"
 echo "  CANN_VERSION=${HUST_ASCEND_RUNTIME_VERSION:-<unknown>}"

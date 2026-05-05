@@ -22,6 +22,7 @@ import logging
 import os
 import subprocess
 import sys
+from pathlib import Path
 from sysconfig import get_paths
 
 from setuptools import Command, Extension, find_packages, setup
@@ -29,7 +30,6 @@ from setuptools.command.build_ext import build_ext
 from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 from setuptools.command.install import install
-from setuptools_scm import get_version
 
 
 def load_module_from_path(module_name, path):
@@ -40,8 +40,29 @@ def load_module_from_path(module_name, path):
     return module
 
 
-ROOT_DIR = os.path.dirname(__file__)
+ROOT_DIR = str(Path(__file__).resolve().parent)
 logger = logging.getLogger(__name__)
+
+
+def resolve_version() -> str:
+    version_file = Path(ROOT_DIR) / "vllm_ascend" / "_version.py"
+    version_file_rel = os.path.relpath(version_file, ROOT_DIR)
+
+    try:
+        from setuptools_scm import get_version
+
+        return get_version(root=ROOT_DIR, relative_to=__file__, write_to=version_file_rel)
+    except (ImportError, LookupError):
+        namespace = {}
+        if version_file.exists():
+            exec(version_file.read_text(encoding="utf-8"), namespace)
+            version = namespace.get("__version__") or namespace.get("version")
+            if isinstance(version, str) and version:
+                return version
+
+        # The checkout action in github action CI does not checkout the tag. It
+        # only checks out the commit. In this case, we set a dummy version.
+        return "0.0.0"
 
 
 def check_or_set_default_env(cmake_args, env_name, env_variable, default_path=""):
@@ -211,7 +232,12 @@ class build_and_install_aclnn(Command):
     def run(self):
         try:
             print("Running bash build_aclnn.sh ...")
-            subprocess.check_call(["bash", "csrc/build_aclnn.sh", ROOT_DIR, envs.SOC_VERSION])
+            build_env = os.environ.copy()
+            build_env["PYTHON_EXECUTABLE"] = sys.executable
+            subprocess.check_call(
+                ["bash", "csrc/build_aclnn.sh", ROOT_DIR, envs.SOC_VERSION],
+                env=build_env,
+            )
             print("build_aclnn.sh executed successfully!")
         except subprocess.CalledProcessError as e:
             print(f"Error running build_aclnn.sh: {e}")
@@ -301,7 +327,26 @@ class cmake_build_ext(build_ext):
         # add CMAKE_INSTALL_PATH
         cmake_args += [f"-DCMAKE_INSTALL_PREFIX={install_path}"]
 
-        cmake_args += [f"-DCMAKE_PREFIX_PATH={pybind11_cmake_path}"]
+        try:
+            torch_cmake_prefix_output = subprocess.check_output(
+                [python_executable, "-c", "import torch; print(torch.utils.cmake_prefix_path)"],
+            ).decode()
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Failed to locate torch CMake prefix path: {e}")
+
+        torch_cmake_prefix_path = next(
+            (
+                line.strip()
+                for line in reversed(torch_cmake_prefix_output.splitlines())
+                if line.strip() and os.path.isabs(line.strip())
+            ),
+            "",
+        )
+        if not torch_cmake_prefix_path:
+            raise RuntimeError(f"Failed to parse torch CMake prefix path from output: {torch_cmake_prefix_output!r}")
+
+        cmake_prefix_paths = [pybind11_cmake_path, torch_cmake_prefix_path]
+        cmake_args += [f"-DCMAKE_PREFIX_PATH={';'.join(path for path in cmake_prefix_paths if path)}"]
 
         soc_version_map = {
             "910b": "ascend910b1",
@@ -434,12 +479,7 @@ class custom_install(install):
 
 
 ROOT_DIR = os.path.dirname(__file__)
-try:
-    VERSION = get_version(write_to="vllm_ascend/_version.py")
-except LookupError:
-    # The checkout action in github action CI does not checkout the tag. It
-    # only checks out the commit. In this case, we set a dummy version.
-    VERSION = "0.0.0"
+VERSION = resolve_version()
 
 ext_modules = []
 if envs.COMPILE_CUSTOM_KERNELS:
