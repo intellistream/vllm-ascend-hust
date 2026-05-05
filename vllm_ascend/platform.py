@@ -153,6 +153,11 @@ class NPUPlatform(Platform):
                     "Skipping Ascend quantization config registration because optional dependency %r is unavailable.",
                     exc.name,
                 )
+            except ImportError as exc:
+                logger.warning(
+                    "Skipping Ascend quantization config registration because optional import failed: %s",
+                    exc,
+                )
         else:
             from vllm_ascend._310p.quantization import AscendModelSlimConfig310  # noqa: F401
 
