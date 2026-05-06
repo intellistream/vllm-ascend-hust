@@ -605,7 +605,6 @@ def register_ascend_customop(vllm_config: VllmConfig | None = None):
 
     from vllm_ascend.ops.activation import AscendQuickGELU, AscendSiluAndMul
     from vllm_ascend.ops.conv import AscendConv2dLayer, AscendConv3dLayer
-    from vllm_ascend.ops.fused_moe.fused_moe import AscendFusedMoE, AscendSharedFusedMoE
     from vllm_ascend.ops.layernorm import AscendGemmaRMSNorm, AscendRMSNorm, AscendRMSNormGated
     from vllm_ascend.ops.linear import (
         AscendColumnParallelLinear,
@@ -629,6 +628,16 @@ def register_ascend_customop(vllm_config: VllmConfig | None = None):
         AscendVocabParallelEmbedding,
     )
 
+    try:
+        from vllm_ascend.ops.fused_moe.fused_moe import AscendFusedMoE, AscendSharedFusedMoE
+    except ModuleNotFoundError as exc:
+        logger.warning(
+            "Skipping Ascend fused MoE custom op registration because an optional upstream dependency is unavailable: %s",
+            exc,
+        )
+        AscendFusedMoE = None
+        AscendSharedFusedMoE = None
+
     global REGISTERED_ASCEND_OPS
     REGISTERED_ASCEND_OPS = {
         "QuickGELU": AscendQuickGELU,
@@ -647,8 +656,6 @@ def register_ascend_customop(vllm_config: VllmConfig | None = None):
         "LogitsProcessor": AscendLogitsProcessor,
         "RMSNorm": AscendRMSNorm,
         "GemmaRMSNorm": AscendGemmaRMSNorm,
-        "FusedMoE": AscendFusedMoE,
-        "SharedFusedMoE": AscendSharedFusedMoE,
         "MultiHeadLatentAttentionWrapper": AscendMultiHeadLatentAttention,
         "MMEncoderAttention": AscendMMEncoderAttention,
         "ApplyRotaryEmb": AscendApplyRotaryEmb,
@@ -656,6 +663,14 @@ def register_ascend_customop(vllm_config: VllmConfig | None = None):
         "Conv2dLayer": AscendConv2dLayer,
         "Conv3dLayer": AscendConv3dLayer,
     }
+
+    if AscendFusedMoE is not None and AscendSharedFusedMoE is not None:
+        REGISTERED_ASCEND_OPS.update(
+            {
+                "FusedMoE": AscendFusedMoE,
+                "SharedFusedMoE": AscendSharedFusedMoE,
+            }
+        )
 
     # 310P: override selected ops with 310P implementations (keep minimal changes outside _310p)
     if is_310p():

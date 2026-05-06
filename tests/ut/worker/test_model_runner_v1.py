@@ -5,8 +5,10 @@ from unittest.mock import MagicMock, patch
 import torch
 from vllm.config import CompilationMode, CUDAGraphMode
 from vllm.v1.kv_cache_interface import FullAttentionSpec, KVCacheConfig, KVCacheGroupSpec, KVCacheTensor
+from vllm.v1.worker.gpu_input_batch import InputBatch
 
 from vllm_ascend.attention.attention_v1 import ACLGRAPH_DECODE_ATTENTION_RETRY_ERROR
+from vllm_ascend.worker.npu_input_batch import NPUInputBatch
 from vllm_ascend.worker.model_runner_v1 import NPUModelRunner
 
 
@@ -192,6 +194,40 @@ class TestNPUModelRunnerACLGraphFallback(unittest.TestCase):
         self.assertEqual(
             runner.compilation_config.cudagraph_mode,
             CUDAGraphMode.PIECEWISE,
+        )
+
+
+class TestNPUInputBatchRegression(unittest.TestCase):
+
+    def test_init_keeps_thinking_budget_holder_in_sync_with_upstream_input_batch(self):
+        upstream_batch = InputBatch(
+            max_num_reqs=2,
+            max_model_len=16,
+            max_num_batched_tokens=16,
+            device=torch.device("cpu"),
+            pin_memory=False,
+            vocab_size=32,
+            block_sizes=[16],
+            kernel_block_sizes=[16],
+        )
+        batch = NPUInputBatch(
+            max_num_reqs=2,
+            max_model_len=16,
+            max_num_batched_tokens=16,
+            device=torch.device("cpu"),
+            pin_memory=False,
+            vocab_size=32,
+            block_sizes=[16],
+            kernel_block_sizes=[[16]],
+        )
+
+        self.assertEqual(
+            hasattr(batch, "thinking_budget_state_holder"),
+            hasattr(upstream_batch, "thinking_budget_state_holder"),
+        )
+        self.assertEqual(
+            hasattr(batch, "sampling_metadata"),
+            hasattr(upstream_batch, "sampling_metadata"),
         )
 
 

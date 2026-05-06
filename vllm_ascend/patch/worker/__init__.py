@@ -24,11 +24,11 @@ from vllm.triton_utils import HAS_TRITON
 def _import_optional_patch(module_name: str) -> None:
     try:
         importlib.import_module(module_name)
-    except ModuleNotFoundError as exc:
+    except (ImportError, ModuleNotFoundError) as exc:
         logger.warning(
-            "Skipping optional worker patch %s because dependency %r is unavailable.",
+            "Skipping optional worker patch %s because an upstream dependency is unavailable: %s",
             module_name,
-            exc.name,
+            exc,
         )
 
 

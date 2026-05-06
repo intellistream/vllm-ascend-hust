@@ -466,6 +466,7 @@ class NPUModelRunner310(NPUModelRunner):
                 block_sizes=block_sizes,
                 is_spec_decode=bool(self.vllm_config.speculative_config),
                 logitsprocs=self.input_batch.logitsprocs,
+                logitsprocs_need_output_token_ids=self.input_batch.logitsprocs_need_output_token_ids,
                 is_pooling_model=self.is_pooling_model,
                 num_speculative_tokens=(
                     self.vllm_config.speculative_config.num_speculative_tokens
@@ -473,4 +474,5 @@ class NPUModelRunner310(NPUModelRunner):
                     else 0
                 ),
                 kernel_block_sizes=self.kernel_block_sizes,
+                reasoning_config=self.vllm_config.reasoning_config,
             )

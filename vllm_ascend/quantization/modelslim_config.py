@@ -42,10 +42,8 @@ from vllm.model_executor.models.utils import WeightsMapper
 
 from vllm_ascend.utils import ASCEND_QUANTIZATION_METHOD, calc_split_factor
 
+from .constants import MODELSLIM_CONFIG_FILENAME
 from .methods import get_scheme_class
-
-# The config filename that ModelSlim generates after quantizing a model.
-MODELSLIM_CONFIG_FILENAME = "quant_model_description.json"
 
 # key: model_type
 # value: vLLM prefix -> HF prefix mapping (used to convert vLLM layer names to HF format
